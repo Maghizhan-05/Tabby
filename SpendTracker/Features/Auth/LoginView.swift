@@ -61,31 +61,61 @@ struct LoginView: View {
     }
 
     private var authFields: some View {
-        VStack(spacing: 2) {
-            TextField("Email", text: $auth.email)
-                .textContentType(.emailAddress)
-                .keyboardType(.emailAddress)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .padding(.horizontal, 18)
-                .padding(.vertical, 17)
-            Divider().overlay(Theme.hairline).padding(.horizontal, 18)
-            SecureField("Password", text: $auth.password)
-                .textContentType(.password)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 17)
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(spacing: 2) {
+                TextField("Email", text: $auth.email)
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 17)
+                Divider().overlay(Theme.hairline).padding(.horizontal, 18)
+                SecureField("Password", text: $auth.password)
+                    .textContentType(auth.mode == .createAccount ? .newPassword : .password)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 17)
+                if auth.mode == .createAccount {
+                    Divider().overlay(Theme.hairline).padding(.horizontal, 18)
+                    SecureField("Confirm password", text: $auth.confirmPassword)
+                        .textContentType(.newPassword)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 17)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .opacity
+                        ))
+                }
+            }
+            .foregroundStyle(Theme.ink)
+            .background(Theme.surface.opacity(0.90), in: Theme.cardShape)
+            .overlay(Theme.cardShape.stroke(Theme.hairline))
+            .clipShape(Theme.cardShape)
+
+            if let error = auth.confirmPasswordError {
+                Label(error, systemImage: "exclamationmark.circle.fill")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Theme.accentBright)
+                    .transition(.opacity)
+            }
+
+            if auth.mode == .createAccount {
+                Text("Create your account — enter email, password, and confirm it.")
+                    .font(.caption)
+                    .foregroundStyle(Theme.subtleInk)
+                    .transition(.opacity)
+            }
         }
-        .foregroundStyle(Theme.ink)
-        .background(Theme.surface.opacity(0.90), in: Theme.cardShape)
-        .overlay(Theme.cardShape.stroke(Theme.hairline))
+        .animation(reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 0.82), value: auth.mode)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: auth.confirmPasswordError != nil)
     }
 
     private var primaryActions: some View {
         VStack(spacing: 14) {
-            Button { Task { await auth.signIn() } } label: {
+            Button { Task { await auth.submitPrimary() } } label: {
                 HStack(spacing: 10) {
                     TabbyOrbit(size: 20, lineWidth: 2)
-                    Text(auth.isBusy ? "Signing in" : "Enter Tabby")
+                    Text(auth.primaryCTATitle)
                     Spacer()
                     Image(systemName: "arrow.up.right").font(.subheadline.weight(.bold))
                 }
@@ -95,12 +125,17 @@ struct LoginView: View {
                 .padding(.vertical, 17)
                 .background(LinearGradient(colors: [Theme.accentBright, Theme.accent], startPoint: .topLeading, endPoint: .bottomTrailing), in: Theme.controlShape)
                 .shadow(color: Theme.accentGlow, radius: 16, y: 6)
+                .opacity(auth.canSubmitPrimary ? 1 : 0.5)
             }
             .buttonStyle(.plain)
-            .disabled(auth.isBusy)
+            .disabled(!auth.canSubmitPrimary)
 
-            Button { Task { await auth.signUp() } } label: {
-                Text("Create an account").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.accentBright)
+            Button { withAnimation { auth.toggleMode() } } label: {
+                Text(auth.mode == .createAccount
+                     ? "Already have an account? Sign in"
+                     : "Create an account")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.accentBright)
             }
             .disabled(auth.isBusy)
         }

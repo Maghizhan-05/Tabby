@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import WidgetKit
 
 /// Recent spending is deliberately quiet so the analytics visual remains primary.
 struct RecentEntriesListView: View {
@@ -53,5 +54,7 @@ struct RecentEntriesListView: View {
     private func delete(at offsets: IndexSet) {
         for index in offsets { modelContext.delete(expenses[index]) }
         try? modelContext.save()
+        // Keep the widget's shared-store view in sync after a deletion.
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }

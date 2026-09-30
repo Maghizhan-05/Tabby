@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import SwiftData
+import WidgetKit
 
 @MainActor
 final class QuickEntryViewModel: ObservableObject {
@@ -68,6 +69,9 @@ final class QuickEntryViewModel: ObservableObject {
         context.insert(expense)
         do {
             try context.save()
+            // Push the new entry to the home-screen widget's shared App-Group
+            // store view so today's totals/ring refresh promptly.
+            WidgetCenter.shared.reloadAllTimelines()
             return expense
         } catch {
             notice = "Could not save. Try again."
