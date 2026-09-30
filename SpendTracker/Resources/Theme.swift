@@ -1,5 +1,41 @@
 import SwiftUI
 
+/// Fixed, muted accents keep category labels distinct without breaking Tabby's dark palette.
+enum CategoryAccent: Equatable {
+    case food
+    case transport
+    case groceries
+    case bills
+    case shopping
+    case entertainment
+    case health
+    case other
+    case neutral
+
+    var color: Color {
+        switch self {
+        case .food:
+            Color(red: 0.95, green: 0.69, blue: 0.38)
+        case .transport:
+            Color(red: 0.42, green: 0.76, blue: 0.82)
+        case .groceries:
+            Color(red: 0.58, green: 0.78, blue: 0.48)
+        case .bills:
+            Color(red: 0.73, green: 0.64, blue: 0.94)
+        case .shopping:
+            Color(red: 0.96, green: 0.51, blue: 0.66)
+        case .entertainment:
+            Color(red: 0.87, green: 0.57, blue: 0.94)
+        case .health:
+            Color(red: 0.42, green: 0.81, blue: 0.67)
+        case .other:
+            Color(red: 0.75, green: 0.75, blue: 0.72)
+        case .neutral:
+            Theme.subtleInk
+        }
+    }
+}
+
 /// Tabby's dark, wealth-forward design system. Gold is reserved for focus,
 /// progress, and confirmation so it feels like a signal rather than decoration.
 enum Theme {
@@ -24,6 +60,20 @@ enum Theme {
         Color(red: 0.56, green: 0.73, blue: 0.35),
         Color(red: 0.77, green: 0.76, blue: 0.72),
     ]
+
+    static func categoryAccent(for categoryName: String) -> CategoryAccent {
+        switch categoryName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "food": .food
+        case "transport": .transport
+        case "groceries": .groceries
+        case "bills": .bills
+        case "shopping": .shopping
+        case "entertainment": .entertainment
+        case "health": .health
+        case "other": .other
+        default: .neutral
+        }
+    }
 
     static let cardShape = RoundedRectangle(cornerRadius: 24, style: .continuous)
     static let controlShape = RoundedRectangle(cornerRadius: 16, style: .continuous)

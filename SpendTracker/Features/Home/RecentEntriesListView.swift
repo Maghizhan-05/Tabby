@@ -2,6 +2,16 @@ import SwiftUI
 import SwiftData
 import WidgetKit
 
+enum RecentEntryPresentation {
+    static func title(for expense: Expense) -> String {
+        expense.note ?? "\(expense.categoryName) expense"
+    }
+
+    static func category(for expense: Expense) -> String {
+        expense.categoryName
+    }
+}
+
 /// Recent spending is deliberately quiet so the analytics visual remains primary.
 struct RecentEntriesListView: View {
     @Environment(\.modelContext) private var modelContext
@@ -28,17 +38,17 @@ struct RecentEntriesListView: View {
                             .frame(width: 30, height: 30)
                             .overlay(Image(systemName: "circle.fill").font(.system(size: 6)).foregroundStyle(Theme.accent))
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(expense.categoryName)
+                            Text(RecentEntryPresentation.title(for: expense))
                                 .font(.body.weight(.medium))
                                 .foregroundStyle(Theme.ink)
-                            Text(expense.date, format: .dateTime.month().day().hour().minute())
-                                .font(.caption)
-                                .foregroundStyle(Theme.subtleInk)
-                            if let note = expense.note {
-                                Text(note)
+                                .lineLimit(1)
+                            HStack(spacing: 8) {
+                                Text(RecentEntryPresentation.category(for: expense))
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(Theme.categoryAccent(for: expense.categoryName).color.opacity(0.84))
+                                Text(expense.date, format: .dateTime.month().day().hour().minute())
                                     .font(.caption)
                                     .foregroundStyle(Theme.subtleInk)
-                                    .lineLimit(1)
                             }
                         }
                         Spacer()
