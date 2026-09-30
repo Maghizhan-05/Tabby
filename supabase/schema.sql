@@ -68,6 +68,7 @@ create table if not exists public.expenses (
     user_id uuid not null references auth.users (id) on delete cascade,
     amount numeric(12, 2) not null,
     category_name text not null,
+    note text,
     date timestamptz not null default now(),
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),

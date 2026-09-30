@@ -10,7 +10,8 @@ Live Activity / Dynamic Island confirmation, plus an App Intent bindable to **Ba
 
 - **Quick entry** bottom sheet: autofocused decimal amount with dominant typography,
   a searchable category field that offers **Add "<text>"** for unmatched input, an
-  inline date picker (defaults to now), and one full-width Submit.
+  optional note (120 characters), an inline date picker (defaults to now), and one
+  full-width Submit.
 - **Home** split layout: top-half analytics with a compact mode selector over a single
   chart/ring canvas (Daily · Weekly · Monthly · Yearly · Categories · Trends, all
   Swift Charts); calm recent-entries list below.
@@ -37,14 +38,15 @@ cp Config/Secrets.example.xcconfig Config/Secrets.xcconfig
 # 2. Generate the Xcode project
 xcodegen generate
 
-# 3. Open, or build from the CLI
+# 3. Open in Xcode, or build/install on the simulator
 open SpendTracker.xcodeproj
 # or:
-xcodebuild -project SpendTracker.xcodeproj -scheme SpendTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
-  -derivedDataPath ./DerivedData build \
-  CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY=""
+./run.sh
 ```
+
+`run.sh` re-signs the final simulator app and widget bundles with their App
+Group entitlements before installation, which is required for a real shared
+widget store on this Xcode 27 setup.
 
 The app **builds and runs without Supabase keys** — it treats missing/empty keys as
 "not configured" and disables the cloud paths. Add real keys to enable auth and sync.
@@ -86,6 +88,16 @@ These flow into the app via Info.plist keys and are read by `SupabaseClientProvi
    policies scoped to `auth.uid()`).
 3. Optionally run `supabase/seed.sql` while authenticated to seed default categories server-side.
 4. Copy the project URL and the publishable key into `Config/Secrets.xcconfig` (see above).
+
+For an existing project created before expense notes, run the idempotent migration
+`supabase/migrations/20260930_add_expense_note.sql` in the SQL editor:
+
+```sql
+alter table public.expenses add column if not exists note text;
+```
+
+Local notes work without this migration. Cloud upserts containing a non-empty note require
+the new column; note-less rows remain compatible with the pre-migration schema.
 
 ### Configuring Apple + Google OAuth providers
 

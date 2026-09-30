@@ -24,6 +24,7 @@ struct QuickEntrySheetView: View {
                     }
                     amountField
                     categoryField
+                    noteField
                     datePicker
                     Spacer()
                     submitButton
@@ -88,6 +89,22 @@ struct QuickEntrySheetView: View {
             .overlay(Theme.controlShape.stroke(Theme.hairline))
         }
         .buttonStyle(.plain)
+    }
+
+    private var noteField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField("Note (optional)", text: $viewModel.noteText, axis: .vertical)
+                .lineLimit(1...2)
+                .font(.subheadline)
+                .foregroundStyle(Theme.ink)
+                .padding(16)
+                .background(Theme.surface.opacity(0.88), in: Theme.controlShape)
+                .overlay(Theme.controlShape.stroke(viewModel.isNoteValid ? Theme.hairline : .red.opacity(0.7)))
+            Text("\(viewModel.noteText.count)/\(Expense.maximumNoteLength)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(viewModel.isNoteValid ? Theme.subtleInk : .red)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
     }
 
     private var datePicker: some View {

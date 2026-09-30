@@ -7,6 +7,13 @@ import WidgetKit
 final class QuickEntryViewModel: ObservableObject {
     @Published var amountText = ""
     @Published var categoryQuery = ""
+    @Published var noteText = "" {
+        didSet {
+            if noteText.count > Expense.maximumNoteLength {
+                noteText = String(noteText.prefix(Expense.maximumNoteLength))
+            }
+        }
+    }
     @Published var selectedDate = Date()
     @Published var notice: String?
 
@@ -17,7 +24,15 @@ final class QuickEntryViewModel: ObservableObject {
 
     var canSubmit: Bool {
         guard let amount, amount > 0 else { return false }
-        return !categoryQuery.trimmingCharacters(in: .whitespaces).isEmpty
+        return !categoryQuery.trimmingCharacters(in: .whitespaces).isEmpty && isNoteValid
+    }
+
+    /// Notes are optional but capped at 120 user-visible characters to keep
+    /// quick entry compact and preserve a predictable sync payload.
+    var isNoteValid: Bool { noteText.count <= Expense.maximumNoteLength }
+
+    var normalizedNote: String? {
+        Expense.normalizedNote(noteText)
     }
 
     /// Filters categories by the search query (case-insensitive, trimmed).
@@ -64,6 +79,7 @@ final class QuickEntryViewModel: ObservableObject {
         let expense = Expense(
             amount: amount,
             categoryName: categoryName,
+            note: normalizedNote,
             date: selectedDate
         )
         context.insert(expense)

@@ -34,6 +34,12 @@ struct RecentEntriesListView: View {
                             Text(expense.date, format: .dateTime.month().day().hour().minute())
                                 .font(.caption)
                                 .foregroundStyle(Theme.subtleInk)
+                            if let note = expense.note {
+                                Text(note)
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.subtleInk)
+                                    .lineLimit(1)
+                            }
                         }
                         Spacer()
                         Text(CurrencyFormat.string(expense.amount))

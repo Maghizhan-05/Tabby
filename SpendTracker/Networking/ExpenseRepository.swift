@@ -14,11 +14,12 @@ protocol ExpenseRepositoring {
 
 #if canImport(Supabase)
 /// Row payload for the `expenses` table. Column names match supabase/schema.sql.
-private struct ExpenseRow: Encodable {
+struct ExpenseUpsertPayload: Encodable {
     let id: String
     let user_id: String
     let amount: String        // numeric(12,2) — send as string to preserve precision
     let category_name: String
+    let note: String?
     let date: String          // ISO8601 timestamptz
     let created_at: String
     let updated_at: String
@@ -49,11 +50,12 @@ final class SupabaseExpenseRepository: ExpenseRepositoring {
         }
 
         let iso = ISO8601DateFormatter()
-        let row = ExpenseRow(
+        let row = ExpenseUpsertPayload(
             id: expense.id.uuidString,
             user_id: userId,
             amount: NSDecimalNumber(decimal: expense.amount).stringValue,
             category_name: expense.categoryName,
+            note: expense.note,
             date: iso.string(from: expense.date),
             created_at: iso.string(from: expense.createdAt),
             updated_at: iso.string(from: Date())

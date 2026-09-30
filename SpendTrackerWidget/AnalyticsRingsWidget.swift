@@ -68,9 +68,11 @@ struct AnalyticsRingsWidgetView: View {
                 Text("Today").font(.caption2).foregroundStyle(.white.opacity(0.58))
                 Text(currency(entry.todayTotal))
                     .font(.headline.weight(.bold))
+                    .monospacedDigit()
                     .foregroundStyle(.white)
-                    .minimumScaleFactor(0.5)
+                    .minimumScaleFactor(0.62)
                     .lineLimit(1)
+                    .layoutPriority(1)
             }
         }
     }
@@ -88,7 +90,7 @@ struct AnalyticsRingsWidgetView: View {
                         Circle().fill(ringPalette[index % ringPalette.count]).frame(width: 7, height: 7)
                         Text(slice.category).font(.caption2).foregroundStyle(.white.opacity(0.78))
                         Spacer()
-                        Text(currency(slice.total)).font(.caption2.weight(.medium)).foregroundStyle(.white)
+                        Text(currency(slice.total)).font(.caption2.weight(.medium).monospacedDigit()).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.7)
                     }
                 }
                 if entry.slices.isEmpty {
@@ -105,9 +107,7 @@ struct AnalyticsRingsWidgetView: View {
     }
 
     private func currency(_ value: Double) -> String {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        return f.string(from: NSNumber(value: value)) ?? "\(value)"
+        WidgetCurrencyFormatter.string(value)
     }
 }
 

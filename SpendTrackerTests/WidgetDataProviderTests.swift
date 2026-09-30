@@ -4,6 +4,11 @@ import SwiftData
 
 @MainActor
 final class WidgetDataProviderTests: XCTestCase {
+    func testCompactCurrencyUsesOneDecimalThousandsForLongWidgetTotals() {
+        XCTAssertEqual(WidgetCurrencyFormatter.string(23_410), "₹23.4K")
+        XCTAssertEqual(WidgetCurrencyFormatter.string(1_200_000), "₹1.2M")
+    }
+
     func testSnapshotReflectsTodayExpenseWrittenToTheSameStore() throws {
         let storeURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("WidgetDataProviderTests-\(UUID().uuidString).store")
