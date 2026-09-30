@@ -10,8 +10,8 @@ configs:
   Release: release
 
 configFiles:
-  Debug: Config/Secrets.xcconfig
-  Release: Config/Secrets.xcconfig
+  Debug: Config/App.xcconfig
+  Release: Config/App.xcconfig
 
 packages:
   Supabase:
@@ -59,7 +59,9 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         SUPABASE_URL: $(SUPABASE_URL)
-        SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
+        SUPABASE_PUBLISHABLE_KEY: $(SUPABASE_PUBLISHABLE_KEY)
+        APPLE_SIGNIN_ENABLED: $(APPLE_SIGNIN_ENABLED)
+        GOOGLE_SIGNIN_ENABLED: $(GOOGLE_SIGNIN_ENABLED)
         CFBundleURLTypes:
           - CFBundleURLName: com.maghizhan.spendtracker
             CFBundleURLSchemes:

@@ -1,0 +1,24 @@
+// App.xcconfig (committed, non-secret)
+// Bridges the user's Secrets.xcconfig variable names to the build-setting
+// names that Info.plist substitutes. Secrets.xcconfig uses Supabase's NEW
+// key naming (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+// the app reads SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY. We map one to the other
+// here so the live keys are actually read without renaming the user's file.
+//
+// NOTE on the URL and "//": xcconfig treats "//" as the start of a comment, so a
+// raw https:// value has everything after "https:" stripped. To keep the scheme
+// intact we DO NOT rely on the raw URL slashes surviving; instead we reconstruct
+// the URL from a host-only value when needed. The user's Secrets.xcconfig may
+// contain a full https:// URL (whose "//" is eaten by the comment rule, leaving
+// "https:") OR an escaped form (https:$()//host). The app's SupabaseClientProvider
+// tolerates a bare "https:" + host by repairing the missing slashes at runtime.
+#include "Secrets.xcconfig"
+
+SUPABASE_URL = $(NEXT_PUBLIC_SUPABASE_URL)
+SUPABASE_PUBLISHABLE_KEY = $(NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)
+
+// OAuth provider toggles. YES enables the Apple/Google buttons in the UI once
+// Supabase is configured; the actual OAuth round-trip still requires the
+// provider to be enabled in the Supabase dashboard.
+APPLE_SIGNIN_ENABLED = YES
+GOOGLE_SIGNIN_ENABLED = YES

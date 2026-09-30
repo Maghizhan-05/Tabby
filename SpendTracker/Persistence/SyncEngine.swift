@@ -40,16 +40,26 @@ final class SyncEngine {
         try? modelContext.save()
     }
 
-    /// Push any locally-created custom categories to the backend.
+    /// Push any locally-created / dirty custom categories to the backend.
+    /// Only categories whose sync state is not `.synced` are pushed, and each is
+    /// marked `.synced` only after a successful backend write (mirrors expenses).
     func pushUnsyncedCategories() async {
         let descriptor = FetchDescriptor<Category>(
-            predicate: #Predicate<Category> { $0.isDefault == false }
+            predicate: #Predicate<Category> { $0.syncStateRaw != 1 }
         )
         guard let categories = try? modelContext.fetch(descriptor), !categories.isEmpty else { return }
 
         for category in categories {
-            try? await categoryRepository.upsert(category)
+            do {
+                try await categoryRepository.upsert(category)
+                category.remoteId = category.id.uuidString
+                category.syncState = .synced
+            } catch {
+                // Leave unsynced; will retry on next push.
+                continue
+            }
         }
+        try? modelContext.save()
     }
 
     /// Convenience: push everything that needs syncing.

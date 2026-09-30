@@ -64,6 +64,16 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
+    /// Completes an OAuth round-trip when the callback URL is delivered to the app
+    /// via the custom URL scheme (spendtracker://auth-callback).
+    func handleOAuthCallback(_ url: URL) async {
+        await run {
+            let session = try await self.authService.completeOAuth(from: url)
+            self.session = session
+            self.isAuthenticated = true
+        }
+    }
+
     func signOut() async {
         try? await authService.signOut()
         session = nil

@@ -49,17 +49,34 @@ xcodebuild -project SpendTracker.xcodeproj -scheme SpendTracker \
 The app **builds and runs without Supabase keys** — it treats missing/empty keys as
 "not configured" and disables the cloud paths. Add real keys to enable auth and sync.
 
-### A note on `SUPABASE_URL` in xcconfig
+### Supabase keys and the `//` caveat
 
-xcconfig treats `//` as a comment, so a raw `https://` value breaks. Escape it:
+Supabase renamed the old **anon key** to the **publishable key**. This app standardizes
+on `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` internally, but `Config/Secrets.xcconfig`
+holds the values under Supabase's new public names:
 
 ```
-SUPABASE_URL = https:$()//your-project.supabase.co
-SUPABASE_ANON_KEY = eyJhbGci...your-anon-key...
+NEXT_PUBLIC_SUPABASE_URL=xxxxxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxxxxxxx
 ```
 
-These flow into the app via Info.plist keys (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) and are
-read by `SupabaseClientProvider`. **No keys are hardcoded in source.**
+`Config/App.xcconfig` (committed, non-secret) `#include`s `Secrets.xcconfig` and bridges
+those names to the build settings the app reads:
+
+```
+SUPABASE_URL = $(NEXT_PUBLIC_SUPABASE_URL)
+SUPABASE_PUBLISHABLE_KEY = $(NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)
+```
+
+**The `//` caveat.** xcconfig treats `//` as the start of a comment, and the slashes do
+**not** reliably survive Info.plist substitution even when escaped with `$()`. So write the
+URL **without the scheme** (host only, no `https://`). `SupabaseClientProvider.repairURLString`
+prepends `https://` at runtime (and also repairs `https:/host` / `https:host` forms).
+`SUPABASE_PUBLISHABLE_KEY` also falls back to a legacy `SUPABASE_ANON_KEY` Info.plist key
+for backward compatibility.
+
+These flow into the app via Info.plist keys and are read by `SupabaseClientProvider`.
+**No keys are hardcoded in source**, and `Config/Secrets.xcconfig` is gitignored.
 
 ## Supabase setup
 
@@ -68,11 +85,19 @@ read by `SupabaseClientProvider`. **No keys are hardcoded in source.**
    `expenses`, enables **Row Level Security**, and adds per-user select/insert/update/delete
    policies scoped to `auth.uid()`).
 3. Optionally run `supabase/seed.sql` while authenticated to seed default categories server-side.
-4. Copy the project URL and the anon/public key into `Config/Secrets.xcconfig` (see above).
+4. Copy the project URL and the publishable key into `Config/Secrets.xcconfig` (see above).
 
 ### Configuring Apple + Google OAuth providers
 
-In the Supabase dashboard → **Authentication → Providers**:
+The app uses the Supabase OAuth **web flow** (`ASWebAuthenticationSession`) with a custom
+URL scheme redirect. The app declares the `spendtracker` URL scheme in `Info.plist` and
+uses **`spendtracker://auth-callback`** as the OAuth redirect. `SpendTrackerApp`'s
+`.onOpenURL` forwards that callback to `client.auth.session(from:)` to complete the round-trip.
+
+In the Supabase dashboard → **Authentication → URL Configuration**, add
+`spendtracker://auth-callback` to the **Redirect URLs** allow-list.
+
+Then in **Authentication → Providers**:
 
 - **Apple**: enable Apple. Create a **Services ID** in the Apple Developer portal, configure
   Sign in with Apple, and add Supabase's callback
@@ -82,9 +107,10 @@ In the Supabase dashboard → **Authentication → Providers**:
   `https://<project-ref>.supabase.co/auth/v1/callback` as an Authorized redirect URI, and paste the
   Client ID + secret into Supabase.
 
-Until these are configured, the app renders the Apple/Google buttons disabled with helper text.
-Set `APPLE_SIGNIN_ENABLED` / `GOOGLE_SIGNIN_ENABLED` (Info.plist bool, via xcconfig) to `YES` once
-you wire the native OAuth flow.
+The Apple/Google buttons are enabled when Supabase is configured and
+`APPLE_SIGNIN_ENABLED` / `GOOGLE_SIGNIN_ENABLED` (Info.plist bools, via xcconfig) are `YES`.
+Configured taps genuinely start the OAuth flow; if a provider isn't enabled server-side the
+Supabase error is surfaced to the user.
 
 ## Binding Back Tap
 
@@ -108,8 +134,14 @@ On device: **Settings → Accessibility → Touch → Back Tap → Double Tap �
 - **Live Activities cannot host an input form** — the Dynamic Island / Live Activity is
   **confirmation-only**; the actual entry form is the in-app bottom sheet.
 - **Back Tap binding is only verifiable on real hardware** (not in the simulator).
-- **Supabase live-project keys must be added** for auth and sync to actually work; without them the
-  app runs fully offline with cloud paths disabled.
-- The Supabase-backed repositories include the wiring points but keep the concrete row encode/upsert
-  minimal to avoid coupling the build to schema drift; wire the table calls when connecting a live project.
+- **Supabase live-project keys enable auth and sync.** Without them the app runs fully offline
+  with cloud paths disabled; with them, email/password + Apple/Google OAuth and background sync
+  are active.
+- **Cloud sync is implemented.** `SyncEngine` pushes unsynced/dirty expenses and categories via
+  the Supabase-backed repositories (`.from("expenses")` / `.from("categories")` upsert-by-UUID,
+  delete-by-id), scoped to `auth.uid()` via RLS. Records are marked `.synced` only after a
+  successful backend write; both `Expense` and `Category` carry a per-record sync flag so nothing
+  is re-pushed every run.
+- **Apple/Google OAuth is implemented** via `client.auth.signInWithOAuth` using the
+  `spendtracker://auth-callback` redirect; configured taps start the real flow.
 - Built and tested against **Xcode 27 / iOS 27 SDK targeting the iPhone 18 Pro simulator**.

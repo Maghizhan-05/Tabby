@@ -33,10 +33,14 @@
 	<string>1</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
-	<key>SUPABASE_ANON_KEY</key>
-	<string>$(SUPABASE_ANON_KEY)</string>
+	<key>SUPABASE_PUBLISHABLE_KEY</key>
+	<string>$(SUPABASE_PUBLISHABLE_KEY)</string>
 	<key>SUPABASE_URL</key>
 	<string>$(SUPABASE_URL)</string>
+	<key>APPLE_SIGNIN_ENABLED</key>
+	<string>$(APPLE_SIGNIN_ENABLED)</string>
+	<key>GOOGLE_SIGNIN_ENABLED</key>
+	<string>$(GOOGLE_SIGNIN_ENABLED)</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

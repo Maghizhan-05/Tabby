@@ -19,6 +19,11 @@ struct SpendTrackerApp: App {
 
     private func handleDeepLink(_ url: URL) {
         guard url.scheme == AppGroupConstants.urlScheme else { return }
+        // OAuth callback: spendtracker://auth-callback
+        if url.host == "auth-callback" {
+            Task { await authViewModel.handleOAuthCallback(url) }
+            return
+        }
         if url.host == AppGroupConstants.quickEntryHost {
             showQuickEntry = true
         }

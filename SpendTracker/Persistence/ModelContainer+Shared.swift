@@ -51,7 +51,10 @@ enum SharedModelContainer {
         guard existingCount == 0 else { return }
 
         for (index, name) in defaultCategoryNames.enumerated() {
-            let category = Category(name: name, isDefault: true, sortOrder: index)
+            // Default categories are local-only presets; mark them .synced so the
+            // SyncEngine does not push them every run. User-created categories
+            // default to .local and are pushed on the next sync.
+            let category = Category(name: name, isDefault: true, sortOrder: index, syncState: .synced)
             context.insert(category)
         }
         try? context.save()
