@@ -41,7 +41,28 @@ final class SupabaseClientProvider {
             self.publishableKey = cleanedKey
             self.isConfigured = true
             #if canImport(Supabase)
-            self.client = SupabaseClient(supabaseURL: url, supabaseKey: cleanedKey)
+            // IMPORTANT: configure an explicit auth session storage so the session
+            // established by signIn/signUp is PERSISTED and readable via
+            // `client.auth.session` on subsequent calls and across app launches.
+            //
+            // The SDK defaults to `KeychainLocalStorage`, but that requires the
+            // process to hold a keychain-sharing entitlement/provisioning profile.
+            // In the XCTest host (and in some app-group configurations) that
+            // keychain write fails silently, leaving no stored current session, so
+            // `client.auth.session` throws `sessionMissing` even right after a
+            // successful signIn. We instead back the session store with the shared
+            // App Group `UserDefaults`, which persists across launches, is shared
+            // with the widget/intents, and works without keychain entitlements.
+            let options = SupabaseClientOptions(
+                auth: SupabaseClientOptions.AuthOptions(
+                    storage: AppGroupSessionStorage()
+                )
+            )
+            self.client = SupabaseClient(
+                supabaseURL: url,
+                supabaseKey: cleanedKey,
+                options: options
+            )
             #endif
         } else {
             self.supabaseURL = nil
@@ -90,3 +111,37 @@ final class SupabaseClientProvider {
         return value.isEmpty ? nil : "https://\(value)"
     }
 }
+
+#if canImport(Supabase)
+/// `AuthLocalStorage` backed by the shared App Group `UserDefaults`.
+///
+/// Why not the SDK's default `KeychainLocalStorage`? The Keychain-backed store
+/// requires the running process to hold a keychain-sharing entitlement. The
+/// XCTest host process does not, so its writes fail silently and the auth
+/// client ends up with no stored current session — making `client.auth.session`
+/// throw `sessionMissing` even immediately after a successful sign-in. Backing
+/// the session with the App Group `UserDefaults` suite persists it across app
+/// launches, shares it with the widget/intents, and works in the test host.
+///
+/// Falls back to `.standard` if the App Group suite is unavailable (e.g. the
+/// entitlement is absent in a bare test target), so persistence still works.
+struct AppGroupSessionStorage: AuthLocalStorage {
+    private let defaults: UserDefaults
+
+    init() {
+        self.defaults = UserDefaults(suiteName: AppGroupConstants.appGroupID) ?? .standard
+    }
+
+    func store(key: String, value: Data) throws {
+        defaults.set(value, forKey: key)
+    }
+
+    func retrieve(key: String) throws -> Data? {
+        defaults.data(forKey: key)
+    }
+
+    func remove(key: String) throws {
+        defaults.removeObject(forKey: key)
+    }
+}
+#endif

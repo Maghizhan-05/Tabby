@@ -30,8 +30,15 @@ final class SupabaseCategoryRepository: CategoryRepositoring {
         #if canImport(Supabase)
         guard let client = provider.client else { throw AuthError.notConfigured }
 
-        let session = try await client.auth.session
-        let userId = session.user.id.uuidString
+        // user_id must come from the authenticated session (RLS is auth.uid()-scoped).
+        // Lowercase to match Postgres's canonical uuid text form (auth.uid()).
+        let userId: String
+        do {
+            userId = try await client.auth.session.user.id.uuidString.lowercased()
+        } catch {
+            guard let stored = client.auth.currentSession else { throw error }
+            userId = stored.user.id.uuidString.lowercased()
+        }
 
         let row = CategoryRow(
             id: category.id.uuidString,

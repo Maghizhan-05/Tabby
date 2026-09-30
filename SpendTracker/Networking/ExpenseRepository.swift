@@ -36,8 +36,17 @@ final class SupabaseExpenseRepository: ExpenseRepositoring {
         guard let client = provider.client else { throw AuthError.notConfigured }
 
         // user_id must come from the authenticated session (RLS is auth.uid()-scoped).
-        let session = try await client.auth.session
-        let userId = session.user.id.uuidString
+        // Prefer the refreshed `session` (guaranteed valid). Fall back to the
+        // stored `currentSession` so a transient refresh hiccup doesn't block a
+        // write when we already hold a persisted session.
+        // Lowercase to match Postgres's canonical uuid text form (auth.uid()).
+        let userId: String
+        do {
+            userId = try await client.auth.session.user.id.uuidString.lowercased()
+        } catch {
+            guard let stored = client.auth.currentSession else { throw error }
+            userId = stored.user.id.uuidString.lowercased()
+        }
 
         let iso = ISO8601DateFormatter()
         let row = ExpenseRow(
