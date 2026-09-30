@@ -1,6 +1,15 @@
 -- Tabby / SpendTracker default category seed
--- Inserts the default categories for the currently authenticated user.
--- Run while authenticated, or adapt the user_id as needed.
+--
+-- NOTE: You normally DO NOT need to run this. The app seeds the 8 default
+-- categories per-user automatically on first sign-in (locally, then synced
+-- under your auth.uid()). Running this in the Supabase SQL editor will FAIL
+-- because auth.uid() is NULL there (you are not signed in as an app user),
+-- and the owner-scoped RLS insert policy correctly rejects a NULL user_id.
+-- That failure is expected and proves RLS is working.
+--
+-- This file is only for optionally pre-populating a SPECIFIC known user:
+-- replace auth.uid() below with that user's UUID (from Authentication -> Users)
+-- and run it. For normal use, ignore this file and just sign in through the app.
 
 insert into public.categories (user_id, name, is_default, sort_order)
 values

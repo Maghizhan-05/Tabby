@@ -16,6 +16,30 @@ final class SupabaseClientProvider {
 
     #if canImport(Supabase)
     private(set) var client: SupabaseClient?
+
+    /// Test-only hook. When non-nil at singleton construction, the client is
+    /// built with this `AuthLocalStorage` instead of the SDK's default.
+    /// PRODUCTION never sets this: the default `nil` path builds the client with
+    /// no storage override, so the SDK uses its secure, app-private
+    /// `KeychainLocalStorage`. This exists purely so the XCTest host — which
+    /// cannot always persist to the Keychain — can inject an in-memory store
+    /// from the test target.
+    static var testStorageOverride: (any AuthLocalStorage)?
+
+    /// TEST-ONLY. Rebuilds the shared client with an injected in-memory
+    /// `AuthLocalStorage`, regardless of whether the singleton was already
+    /// constructed with the default Keychain. Production code never calls this;
+    /// it exists so the live integration tests can guarantee the session is held
+    /// in-process even if some earlier test already touched `shared`. No-op when
+    /// unconfigured. Never weakens production, which uses the default Keychain.
+    func configureClientForTesting(storage: any AuthLocalStorage) {
+        guard isConfigured, let url = supabaseURL, let key = publishableKey else { return }
+        Self.testStorageOverride = storage
+        let options = SupabaseClientOptions(
+            auth: SupabaseClientOptions.AuthOptions(storage: storage)
+        )
+        self.client = SupabaseClient(supabaseURL: url, supabaseKey: key, options: options)
+    }
     #endif
 
     private init() {
@@ -41,28 +65,34 @@ final class SupabaseClientProvider {
             self.publishableKey = cleanedKey
             self.isConfigured = true
             #if canImport(Supabase)
-            // IMPORTANT: configure an explicit auth session storage so the session
-            // established by signIn/signUp is PERSISTED and readable via
-            // `client.auth.session` on subsequent calls and across app launches.
+            // PRODUCTION: build the client WITHOUT overriding auth storage, so the
+            // SDK uses its default `KeychainLocalStorage`. That keeps auth tokens
+            // in the app-private (default access group) Keychain — encrypted at
+            // rest and NOT readable by the widget or any other target. An app can
+            // always use its own default Keychain access group with no
+            // Keychain-Sharing entitlement; that entitlement is only required to
+            // SHARE credentials across targets/apps, which we deliberately do not.
             //
-            // The SDK defaults to `KeychainLocalStorage`, but that requires the
-            // process to hold a keychain-sharing entitlement/provisioning profile.
-            // In the XCTest host (and in some app-group configurations) that
-            // keychain write fails silently, leaving no stored current session, so
-            // `client.auth.session` throws `sessionMissing` even right after a
-            // successful signIn. We instead back the session store with the shared
-            // App Group `UserDefaults`, which persists across launches, is shared
-            // with the widget/intents, and works without keychain entitlements.
-            let options = SupabaseClientOptions(
-                auth: SupabaseClientOptions.AuthOptions(
-                    storage: AppGroupSessionStorage()
+            // The App Group is used ONLY for the shared SwiftData store / rings
+            // (see ModelContainer+Shared). Auth tokens never go into the App Group.
+            //
+            // Tests may inject an in-memory store via `testStorageOverride`
+            // (set from the test target only); production leaves it nil.
+            if let storage = Self.testStorageOverride {
+                let options = SupabaseClientOptions(
+                    auth: SupabaseClientOptions.AuthOptions(storage: storage)
                 )
-            )
-            self.client = SupabaseClient(
-                supabaseURL: url,
-                supabaseKey: cleanedKey,
-                options: options
-            )
+                self.client = SupabaseClient(
+                    supabaseURL: url,
+                    supabaseKey: cleanedKey,
+                    options: options
+                )
+            } else {
+                self.client = SupabaseClient(
+                    supabaseURL: url,
+                    supabaseKey: cleanedKey
+                )
+            }
             #endif
         } else {
             self.supabaseURL = nil
@@ -111,37 +141,3 @@ final class SupabaseClientProvider {
         return value.isEmpty ? nil : "https://\(value)"
     }
 }
-
-#if canImport(Supabase)
-/// `AuthLocalStorage` backed by the shared App Group `UserDefaults`.
-///
-/// Why not the SDK's default `KeychainLocalStorage`? The Keychain-backed store
-/// requires the running process to hold a keychain-sharing entitlement. The
-/// XCTest host process does not, so its writes fail silently and the auth
-/// client ends up with no stored current session — making `client.auth.session`
-/// throw `sessionMissing` even immediately after a successful sign-in. Backing
-/// the session with the App Group `UserDefaults` suite persists it across app
-/// launches, shares it with the widget/intents, and works in the test host.
-///
-/// Falls back to `.standard` if the App Group suite is unavailable (e.g. the
-/// entitlement is absent in a bare test target), so persistence still works.
-struct AppGroupSessionStorage: AuthLocalStorage {
-    private let defaults: UserDefaults
-
-    init() {
-        self.defaults = UserDefaults(suiteName: AppGroupConstants.appGroupID) ?? .standard
-    }
-
-    func store(key: String, value: Data) throws {
-        defaults.set(value, forKey: key)
-    }
-
-    func retrieve(key: String) throws -> Data? {
-        defaults.data(forKey: key)
-    }
-
-    func remove(key: String) throws {
-        defaults.removeObject(forKey: key)
-    }
-}
-#endif
