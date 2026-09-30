@@ -23,8 +23,16 @@ settings:
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
-    CODE_SIGNING_ALLOWED: NO
-    CODE_SIGN_IDENTITY: ""
+    # Ad-hoc sign ("Sign to Run Locally") so entitlements — notably the App
+    # Group — are actually applied on the simulator. This provisions the
+    # group.com.maghizhan.spendtracker container so the app and widget share
+    # ONE SwiftData store. Do NOT set CODE_SIGNING_ALLOWED=NO: that skips the
+    # entitlement-embedding codesign pass and the app group is never provisioned,
+    # causing the app and widget to silently diverge into per-process stores.
+    # No DEVELOPMENT_TEAM is needed on the simulator; app groups there require
+    # only the applied entitlement, not a provisioning profile.
+    CODE_SIGNING_ALLOWED: YES
+    CODE_SIGN_IDENTITY: "-"
     DEVELOPMENT_TEAM: ""
     TARGETED_DEVICE_FAMILY: "1,2"
 
@@ -36,6 +44,11 @@ targets:
     sources:
       - path: SpendTracker
       - path: Shared
+      # Also compile the widget's data provider into the app target so unit
+      # tests (which use @testable import SpendTracker) can drive
+      # WidgetDataProvider.snapshot(...) — the exact code path the widget uses —
+      # and prove the widget sees expenses written through the shared store.
+      - path: SpendTrackerWidget/WidgetDataProvider.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.maghizhan.spendtracker

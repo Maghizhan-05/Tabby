@@ -16,10 +16,15 @@ printf '==> Generating Xcode project from project.yml\n'
 xcodegen generate
 
 printf '==> Building %s for %s\n' "$SCHEME" "$SIM"
+# Ad-hoc sign the simulator build (CODE_SIGN_IDENTITY="-") so the App Group
+# entitlement is applied and the group.com.maghizhan.spendtracker container is
+# provisioned — this is what lets the app and widget share ONE SwiftData store.
+# Building with CODE_SIGNING_ALLOWED=NO skips the entitlement codesign pass and
+# the app + widget silently fall back to SEPARATE per-process default stores.
 xcodebuild -project SpendTracker.xcodeproj -scheme "$SCHEME" \
   -destination "platform=iOS Simulator,name=$SIM" \
   -derivedDataPath "$DERIVED" \
-  CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
+  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" \
   build
 
 printf '==> Booting simulator (ignore “already booted”)\n'

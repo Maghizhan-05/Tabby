@@ -34,12 +34,19 @@ enum WidgetDataProvider {
         guard let container else {
             return Snapshot(todayTotal: 0, slices: [])
         }
+        return snapshot(from: container)
+    }
+
+    /// Pure snapshot computation from any container. Exposed so tests can drive
+    /// the exact code path the widget uses against a shared-store-backed
+    /// container and assert the widget sees app-written expenses.
+    static func snapshot(from container: ModelContainer, now: Date = Date()) -> Snapshot {
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<Expense>()
         let expenses = (try? context.fetch(descriptor)) ?? []
 
         let calendar = Calendar.current
-        let dayInterval = calendar.dateInterval(of: .day, for: Date())
+        let dayInterval = calendar.dateInterval(of: .day, for: now)
         let todays = expenses.filter { dayInterval?.contains($0.date) ?? false }
         let todayTotal = todays.reduce(0.0) { $0 + NSDecimalNumber(decimal: $1.amount).doubleValue }
 

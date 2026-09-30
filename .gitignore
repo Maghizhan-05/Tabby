@@ -37,3 +37,4 @@ Icon
 *.ipa
 *.dSYM.zip
 *.dSYM
+DerivedDataWidget*/

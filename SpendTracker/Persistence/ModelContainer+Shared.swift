@@ -19,7 +19,21 @@ enum SharedModelContainer {
             let storeURL = groupURL.appendingPathComponent(AppGroupConstants.storeFileName)
             configuration = ModelConfiguration(schema: schema, url: storeURL)
         } else {
-            // Fallback to default (e.g. App Group not provisioned in this environment).
+            // The App Group container is NOT provisioned. This is a real
+            // misconfiguration: the app and widget will silently diverge into
+            // SEPARATE per-process default stores, so the widget shows ₹0 while
+            // the app shows real data. On the simulator this happens when the
+            // build skips the entitlement codesign pass (CODE_SIGNING_ALLOWED=NO);
+            // ad-hoc signing (CODE_SIGN_IDENTITY="-") provisions the container.
+            let message = """
+            ⚠️ SharedModelContainer: App Group container for \
+            '\(AppGroupConstants.appGroupID)' is nil. Falling back to a \
+            per-process default store — the widget and app will NOT share data. \
+            Ensure the App Group entitlement is applied (ad-hoc sign the \
+            simulator build; do not disable code signing).
+            """
+            print(message)
+            assertionFailure(message)
             configuration = ModelConfiguration(schema: schema)
         }
 
