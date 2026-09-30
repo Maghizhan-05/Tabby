@@ -46,6 +46,11 @@ enum CurrencyFormat {
 
 /// Maps the angle-selection value provided by Charts to a donut segment.
 enum DonutSelection {
+    enum Intent {
+        case toggle(String)
+        case clear
+    }
+
     static func index(for angle: Double, values: [Double]) -> Int? {
         guard angle >= 0, !values.isEmpty else { return nil }
 
@@ -57,6 +62,19 @@ enum DonutSelection {
             }
         }
         return nil
+    }
+
+    static func category(after intent: Intent, current: String?) -> String? {
+        switch intent {
+        case let .toggle(category):
+            return current == category ? nil : category
+        case .clear:
+            return nil
+        }
+    }
+
+    static func isLatest(generation: UInt, currentGeneration: UInt) -> Bool {
+        generation == currentGeneration
     }
 }
 
@@ -110,6 +128,7 @@ struct SelectableDonutChart: View {
     let innerRadius: Double
 
     @State private var selectedAngle: Double?
+    @State private var selectionGeneration: UInt = 0
 
     private var selectedItem: CategoryTotal? {
         totals.first { $0.category == selectedCategory }
@@ -121,49 +140,51 @@ struct SelectableDonutChart: View {
 
     var body: some View {
         GeometryReader { geometry in
-            ZStack {
-                Chart(totals) { item in
-                    SectorMark(
-                        angle: .value("Total", NSDecimalNumber(decimal: item.total).doubleValue),
-                        innerRadius: .ratio(innerRadius),
-                        angularInset: 1.5
-                    )
-                    .foregroundStyle(item.color)
-                    .cornerRadius(3)
-                    .opacity(selectedCategory == nil || selectedCategory == item.category ? 1 : 0.35)
-                    .accessibilityLabel(item.category)
-                    .accessibilityValue("\(CurrencyFormat.string(item.total)), \(percentage(for: item), format: .percent.precision(.fractionLength(0))) of total")
-                }
-                .chartAngleSelection(value: $selectedAngle)
-                .onChange(of: selectedAngle) { _, angle in
-                    guard let angle,
-                          let index = DonutSelection.index(
-                            for: angle,
-                            values: totals.map { NSDecimalNumber(decimal: $0.total).doubleValue }
-                          ) else {
-                        clearSelection()
-                        return
-                    }
-
-                    let category = totals[index].category
-                    selectedCategory = selectedCategory == category ? nil : category
-                }
-                .simultaneousGesture(
-                    SpatialTapGesture().onEnded { tap in
-                        if !isInsideRing(tap.location, in: geometry.size) {
-                            clearSelection()
-                        }
-                    }
+            Chart(totals) { item in
+                SectorMark(
+                    angle: .value("Total", NSDecimalNumber(decimal: item.total).doubleValue),
+                    innerRadius: .ratio(innerRadius),
+                    angularInset: 1.5
                 )
-
-                if let item = selectedItem {
-                    SegmentSelectionBubble(item: item, percentage: percentage(for: item), dismiss: clearSelection)
-                        .frame(maxWidth: 124)
-                        .position(bubblePosition(for: item, in: geometry.size))
-                        .transition(.opacity.combined(with: .scale(scale: 0.94)))
-                }
+                .foregroundStyle(item.color)
+                .cornerRadius(3)
+                .opacity(selectedCategory == nil || selectedCategory == item.category ? 1 : 0.35)
+                .accessibilityLabel(item.category)
+                .accessibilityValue("\(CurrencyFormat.string(item.total)), \(percentage(for: item), format: .percent.precision(.fractionLength(0))) of total")
             }
-            .animation(.easeInOut(duration: 0.18), value: selectedCategory)
+            .chartAngleSelection(value: $selectedAngle)
+            .onChange(of: selectedAngle) { _, angle in
+                guard let angle,
+                      let index = DonutSelection.index(
+                        for: angle,
+                        values: totals.map { NSDecimalNumber(decimal: $0.total).doubleValue }
+                      ) else {
+                    scheduleSelectionChange(.clear)
+                    return
+                }
+
+                scheduleSelectionChange(.toggle(totals[index].category))
+            }
+            .simultaneousGesture(
+                SpatialTapGesture().onEnded { tap in
+                    if !isInsideRing(tap.location, in: geometry.size) {
+                        scheduleSelectionChange(.clear)
+                    }
+                }
+            )
+            .overlay {
+                ZStack {
+                    if let item = selectedItem {
+                        SegmentSelectionBubble(item: item, percentage: percentage(for: item), dismiss: {
+                            scheduleSelectionChange(.clear)
+                        })
+                            .frame(maxWidth: 124)
+                            .position(bubblePosition(for: item, in: geometry.size))
+                            .transition(.opacity.combined(with: .scale(scale: 0.94)))
+                    }
+                }
+                .animation(.easeInOut(duration: 0.18), value: selectedCategory)
+            }
         }
     }
 
@@ -201,8 +222,23 @@ struct SelectableDonutChart: View {
         return distance >= outerRadius * innerRadius && distance <= outerRadius
     }
 
-    private func clearSelection() {
-        selectedAngle = nil
-        selectedCategory = nil
+    private func scheduleSelectionChange(_ intent: DonutSelection.Intent) {
+        selectionGeneration &+= 1
+        let generation = selectionGeneration
+
+        Task { @MainActor in
+            await Task.yield()
+            guard DonutSelection.isLatest(
+                generation: generation,
+                currentGeneration: selectionGeneration
+            ) else {
+                return
+            }
+
+            selectedCategory = DonutSelection.category(after: intent, current: selectedCategory)
+            if case .clear = intent {
+                selectedAngle = nil
+            }
+        }
     }
 }
