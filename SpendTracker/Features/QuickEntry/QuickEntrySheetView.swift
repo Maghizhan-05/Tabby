@@ -12,9 +12,16 @@ struct QuickEntrySheetView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Theme.paper.ignoresSafeArea()
-
-                VStack(spacing: 28) {
+                TabbyBackdrop()
+                VStack(spacing: 24) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("NEW TAB").font(.caption.weight(.bold)).tracking(1.4).foregroundStyle(Theme.accentBright)
+                            Text("Log a spend").font(.title2.weight(.bold)).foregroundStyle(Theme.ink)
+                        }
+                        Spacer()
+                        TabbyOrbit(size: 34)
+                    }
                     amountField
                     categoryField
                     datePicker
@@ -23,90 +30,87 @@ struct QuickEntrySheetView: View {
                 }
                 .padding(24)
             }
-            .navigationTitle("New Expense")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
-                }
+                ToolbarItem(placement: .topBarLeading) { Button("Cancel") { dismiss() }.foregroundStyle(Theme.subtleInk) }
             }
             .tint(Theme.accent)
         }
+        .preferredColorScheme(.dark)
         .onAppear { amountFocused = true }
         .sheet(isPresented: $showCategoryPicker) {
             NavigationStack {
-                CategoryPickerView(query: $viewModel.categoryQuery) { name in
-                    viewModel.categoryQuery = name
-                    showCategoryPicker = false
+                ZStack {
+                    TabbyBackdrop()
+                    CategoryPickerView(query: $viewModel.categoryQuery) { name in
+                        viewModel.categoryQuery = name
+                        showCategoryPicker = false
+                    }
+                    .searchable(text: $viewModel.categoryQuery, prompt: "Search or add category")
+                    .navigationTitle("Category")
+                    .navigationBarTitleDisplayMode(.inline)
                 }
-                .searchable(text: $viewModel.categoryQuery, prompt: "Search or add category")
-                .navigationTitle("Category")
-                .navigationBarTitleDisplayMode(.inline)
             }
+            .preferredColorScheme(.dark)
             .presentationDetents([.medium, .large])
         }
     }
 
     private var amountField: some View {
-        VStack(spacing: 6) {
-            Text("AMOUNT")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.subtleInk)
-                .tracking(1)
+        VStack(spacing: 7) {
+            Text("AMOUNT").font(.caption.weight(.bold)).foregroundStyle(Theme.subtleInk).tracking(1.3)
             TextField("0", text: $viewModel.amountText)
-                .font(.system(size: 56, weight: .bold, design: .rounded))
+                .font(.system(size: 64, weight: .bold, design: .rounded))
                 .foregroundStyle(Theme.ink)
                 .multilineTextAlignment(.center)
                 .keyboardType(.decimalPad)
                 .focused($amountFocused)
         }
-        .padding(.top, 12)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(Theme.surface.opacity(0.72), in: Theme.cardShape)
+        .overlay(Theme.cardShape.stroke(amountFocused ? Theme.accent.opacity(0.62) : Theme.hairline, lineWidth: amountFocused ? 1.4 : 1))
+        .shadow(color: amountFocused ? Theme.accentGlow : .clear, radius: 14)
     }
 
     private var categoryField: some View {
-        Button {
-            showCategoryPicker = true
-        } label: {
-            HStack {
-                Text(viewModel.categoryQuery.isEmpty ? "Select category" : viewModel.categoryQuery)
+        Button { showCategoryPicker = true } label: {
+            HStack(spacing: 12) {
+                TabbyOrbit(size: 24, lineWidth: 2)
+                Text(viewModel.categoryQuery.isEmpty ? "Choose category" : viewModel.categoryQuery)
+                    .font(.body.weight(.medium))
                     .foregroundStyle(viewModel.categoryQuery.isEmpty ? Theme.subtleInk : Theme.ink)
                 Spacer()
-                Image(systemName: "chevron.right").foregroundStyle(Theme.subtleInk)
+                Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(Theme.accentBright)
             }
             .padding(16)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.hairline))
+            .background(Theme.surface.opacity(0.88), in: Theme.controlShape)
+            .overlay(Theme.controlShape.stroke(Theme.hairline))
         }
         .buttonStyle(.plain)
     }
 
     private var datePicker: some View {
-        DatePicker(
-            "Date",
-            selection: $viewModel.selectedDate,
-            displayedComponents: [.date, .hourAndMinute]
-        )
-        .datePickerStyle(.compact)
-        .padding(.horizontal, 4)
+        DatePicker("When", selection: $viewModel.selectedDate, displayedComponents: [.date, .hourAndMinute])
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(Theme.ink)
+            .datePickerStyle(.compact)
+            .padding(16)
+            .background(Theme.surface.opacity(0.88), in: Theme.controlShape)
+            .overlay(Theme.controlShape.stroke(Theme.hairline))
     }
 
     private var submitButton: some View {
         VStack(spacing: 8) {
-            if let notice = viewModel.notice {
-                Text(notice).font(.caption).foregroundStyle(.red)
-            }
-            Button {
-                submit()
-            } label: {
-                Text("Add Expense")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(18)
-                    .background(
-                        viewModel.canSubmit ? Theme.accent : Theme.accent.opacity(0.4),
-                        in: RoundedRectangle(cornerRadius: 14)
-                    )
+            if let notice = viewModel.notice { Text(notice).font(.caption).foregroundStyle(.red) }
+            Button { submit() } label: {
+                HStack { Text("Lock it in"); Spacer(); Image(systemName: "arrow.up.right").font(.subheadline.weight(.bold)) }
+                    .font(.body.weight(.bold))
+                    .foregroundStyle(Theme.paper)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 18)
+                    .background(viewModel.canSubmit ? Theme.accent : Theme.accent.opacity(0.32), in: Theme.controlShape)
+                    .shadow(color: viewModel.canSubmit ? Theme.accentGlow : .clear, radius: 15, y: 6)
             }
             .buttonStyle(.plain)
             .disabled(!viewModel.canSubmit)
@@ -115,10 +119,7 @@ struct QuickEntrySheetView: View {
 
     private func submit() {
         guard let expense = viewModel.submit(categories: categories, context: modelContext) else { return }
-        LiveActivityManager.shared.startConfirmation(
-            amount: expense.amount,
-            category: expense.categoryName
-        )
+        LiveActivityManager.shared.startConfirmation(amount: expense.amount, category: expense.categoryName)
         dismiss()
     }
 }

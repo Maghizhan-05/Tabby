@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-/// Split layout: top-half analytics, bottom-half recent entries + quick-entry button.
+/// A continuous home canvas: one analytics surface flows into recent spending.
 struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
     @Binding var showQuickEntry: Bool
@@ -9,81 +9,83 @@ struct HomeView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Theme.paper.ignoresSafeArea()
+                TabbyBackdrop()
 
-                VStack(spacing: 0) {
-                    // TOP HALF: analytics
-                    VStack(spacing: 0) {
-                        header
+                VStack(spacing: 14) {
+                    header
+
+                    VStack(spacing: 16) {
                         AnalyticsView(viewModel: viewModel)
-                            .padding(.horizontal, 20)
-                        Spacer(minLength: 0)
                     }
-                    .frame(height: geo.size.height * 0.5)
+                    .padding(18)
+                    .frame(height: geo.size.height * 0.49)
+                    .background(Theme.surface.opacity(0.82), in: Theme.cardShape)
+                    .overlay(Theme.cardShape.stroke(Theme.hairline))
 
-                    Rectangle().fill(Theme.hairline).frame(height: 1)
-
-                    // BOTTOM HALF: recent entries
-                    VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("Recent")
-                                .font(.headline)
+                            Text("Recent activity")
+                                .font(.system(.headline, design: .rounded, weight: .semibold))
                                 .foregroundStyle(Theme.ink)
                             Spacer()
+                            Text("LIVE")
+                                .font(.caption2.weight(.bold))
+                                .tracking(1)
+                                .foregroundStyle(Theme.accentBright)
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 14)
-
                         RecentEntriesListView()
                     }
-                    .frame(height: geo.size.height * 0.5)
+                    .padding(.top, 4)
+                    .frame(maxHeight: .infinity, alignment: .top)
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
 
-                // Floating quick-entry button
                 VStack {
                     Spacer()
-                    Button {
-                        showQuickEntry = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.title2.weight(.bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 60, height: 60)
-                            .background(Theme.accent, in: Circle())
-                            .shadow(color: Theme.accent.opacity(0.35), radius: 8, y: 4)
+                    HStack {
+                        Spacer()
+                        Button {
+                            showQuickEntry = true
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "plus").font(.body.weight(.bold))
+                                Text("Add spend").font(.subheadline.weight(.bold))
+                            }
+                            .foregroundStyle(Theme.paper)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 15)
+                            .background(Theme.accent, in: Capsule())
+                            .shadow(color: Theme.accentGlow, radius: 16, y: 6)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .padding(.bottom, 28)
+                    .padding(.trailing, 22)
+                    .padding(.bottom, 22)
                 }
             }
         }
-        .sheet(isPresented: $showQuickEntry) {
-            QuickEntrySheetView()
-        }
-        .sheet(isPresented: $viewModel.showProfile) {
-            ProfileView()
-        }
-        .overlay(alignment: .topTrailing) {
-            Button {
-                viewModel.showProfile = true
-            } label: {
-                Image(systemName: "person.circle")
-                    .font(.title2)
-                    .foregroundStyle(Theme.ink)
-                    .padding(.trailing, 20)
-                    .padding(.top, 8)
-            }
-        }
+        .preferredColorScheme(.dark)
+        .sheet(isPresented: $showQuickEntry) { QuickEntrySheetView() }
+        .sheet(isPresented: $viewModel.showProfile) { ProfileView() }
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 10) {
+            TabbyOrbit(size: 26, lineWidth: 2.5)
             Text("Tabby")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(size: 25, weight: .bold, design: .rounded))
                 .foregroundStyle(Theme.ink)
             Spacer()
+            Button { viewModel.showProfile = true } label: {
+                Image(systemName: "person.crop.circle")
+                    .font(.title2)
+                    .foregroundStyle(Theme.subtleInk)
+                    .padding(5)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Profile")
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 4)
     }
 }

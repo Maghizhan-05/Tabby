@@ -24,9 +24,8 @@ struct AmountHeadline: View {
 struct EmptyAnalytics: View {
     var body: some View {
         VStack(spacing: 6) {
-            Image(systemName: "chart.pie")
-                .font(.title)
-                .foregroundStyle(Theme.subtleInk.opacity(0.5))
+            TabbyOrbit(size: 34, lineWidth: 2)
+                .opacity(0.8)
             Text("No spending yet")
                 .font(.footnote)
                 .foregroundStyle(Theme.subtleInk)

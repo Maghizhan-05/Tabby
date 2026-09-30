@@ -2,170 +2,144 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject private var auth: AuthViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
 
     var body: some View {
         ZStack {
-            Theme.paper.ignoresSafeArea()
-
+            TabbyBackdrop()
             ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
+                VStack(alignment: .leading, spacing: 26) {
                     header
-
-                    if !auth.isSupabaseConfigured {
-                        configBanner
-                    }
-
-                    emailPasswordFields
-
-                    primaryButtons
-
+                    if !auth.isSupabaseConfigured { configBanner }
+                    authFields
+                    primaryActions
                     divider
-
                     providerButtons
-
                     if let notice = auth.notice {
-                        Text(notice)
-                            .font(.footnote)
-                            .foregroundStyle(Theme.subtleInk)
-                            .padding(.top, 4)
+                        Text(notice).font(.footnote).foregroundStyle(Theme.subtleInk).padding(.top, 2)
                     }
                 }
-                .padding(.horizontal, 28)
-                .padding(.top, 80)
-                .padding(.bottom, 40)
+                .padding(.horizontal, 24)
+                .padding(.top, 64)
+                .padding(.bottom, 36)
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared || reduceMotion ? 0 : 14)
             }
         }
+        .preferredColorScheme(.dark)
         .tint(Theme.accent)
+        .onAppear {
+            guard !reduceMotion else { appeared = true; return }
+            withAnimation(.spring(response: 0.62, dampingFraction: 0.84)) { appeared = true }
+        }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Tabby")
-                .font(.system(size: 44, weight: .bold, design: .rounded))
-                .foregroundStyle(Theme.ink)
-            Text("Track spending in a tap.")
-                .font(.title3)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                TabbyOrbit(size: 34)
+                Text("Tabby")
+                    .font(.system(size: 42, weight: .bold, design: .rounded))
+                    .foregroundStyle(Theme.ink)
+            }
+            Text("Keep the tab.\nNot the guilt.")
+                .font(.system(.title3, design: .rounded, weight: .medium))
                 .foregroundStyle(Theme.subtleInk)
         }
+        .padding(.bottom, 8)
     }
 
     private var configBanner: some View {
-        Text("Supabase not configured — see README")
+        Label("Supabase not configured — see README", systemImage: "exclamationmark.triangle")
             .font(.footnote.weight(.medium))
-            .foregroundStyle(Theme.accent)
-            .padding(12)
+            .foregroundStyle(Theme.accentBright)
+            .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+            .background(Theme.accent.opacity(0.10), in: Theme.controlShape)
+            .overlay(Theme.controlShape.stroke(Theme.accent.opacity(0.28)))
     }
 
-    private var emailPasswordFields: some View {
-        VStack(spacing: 14) {
+    private var authFields: some View {
+        VStack(spacing: 2) {
             TextField("Email", text: $auth.email)
                 .textContentType(.emailAddress)
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .padding(14)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.hairline))
-
+                .padding(.horizontal, 18)
+                .padding(.vertical, 17)
+            Divider().overlay(Theme.hairline).padding(.horizontal, 18)
             SecureField("Password", text: $auth.password)
                 .textContentType(.password)
-                .padding(14)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.hairline))
+                .padding(.horizontal, 18)
+                .padding(.vertical, 17)
         }
+        .foregroundStyle(Theme.ink)
+        .background(Theme.surface.opacity(0.90), in: Theme.cardShape)
+        .overlay(Theme.cardShape.stroke(Theme.hairline))
     }
 
-    private var primaryButtons: some View {
-        VStack(spacing: 12) {
-            Button {
-                Task { await auth.signIn() }
-            } label: {
-                buttonLabel("Sign In")
+    private var primaryActions: some View {
+        VStack(spacing: 14) {
+            Button { Task { await auth.signIn() } } label: {
+                HStack(spacing: 10) {
+                    TabbyOrbit(size: 20, lineWidth: 2)
+                    Text(auth.isBusy ? "Signing in" : "Enter Tabby")
+                    Spacer()
+                    Image(systemName: "arrow.up.right").font(.subheadline.weight(.bold))
+                }
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Theme.paper)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 17)
+                .background(LinearGradient(colors: [Theme.accentBright, Theme.accent], startPoint: .topLeading, endPoint: .bottomTrailing), in: Theme.controlShape)
+                .shadow(color: Theme.accentGlow, radius: 16, y: 6)
             }
             .buttonStyle(.plain)
             .disabled(auth.isBusy)
 
-            Button {
-                Task { await auth.signUp() }
-            } label: {
-                Text("Create an account")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Theme.accent)
+            Button { Task { await auth.signUp() } } label: {
+                Text("Create an account").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.accentBright)
             }
             .disabled(auth.isBusy)
         }
     }
 
     private var divider: some View {
-        HStack {
+        HStack(spacing: 10) {
             Rectangle().fill(Theme.hairline).frame(height: 1)
-            Text("or").font(.caption).foregroundStyle(Theme.subtleInk)
+            Text("or continue with").font(.caption).foregroundStyle(Theme.subtleInk)
             Rectangle().fill(Theme.hairline).frame(height: 1)
         }
     }
 
     private var providerButtons: some View {
-        VStack(spacing: 12) {
-            providerButton(
-                title: "Sign in with Apple",
-                systemImage: "apple.logo",
-                enabled: auth.isAppleConfigured,
-                disabledText: "Apple sign-in not configured"
-            ) {
-                Task { await auth.signInWithApple() }
-            }
-
-            providerButton(
-                title: "Sign in with Google",
-                systemImage: "g.circle",
-                enabled: auth.isGoogleConfigured,
-                disabledText: "Google sign-in not configured"
-            ) {
-                Task { await auth.signInWithGoogle() }
-            }
+        VStack(spacing: 10) {
+            providerButton(title: "Continue with Apple", systemImage: "apple.logo", enabled: auth.isAppleConfigured, disabledText: "Apple sign-in not configured") { Task { await auth.signInWithApple() } }
+            providerButton(title: "Continue with Google", systemImage: "g.circle", enabled: auth.isGoogleConfigured, disabledText: "Google sign-in not configured") { Task { await auth.signInWithGoogle() } }
         }
     }
 
-    private func providerButton(
-        title: String,
-        systemImage: String,
-        enabled: Bool,
-        disabledText: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private func providerButton(title: String, systemImage: String, enabled: Bool, disabledText: String, action: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
             Button(action: action) {
-                HStack {
-                    Image(systemName: systemImage)
+                HStack(spacing: 12) {
+                    Image(systemName: systemImage).font(.body.weight(.semibold))
                     Text(title).font(.body.weight(.medium))
                     Spacer()
+                    Image(systemName: "arrow.up.right").font(.caption.weight(.bold)).foregroundStyle(Theme.subtleInk)
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity)
                 .foregroundStyle(enabled ? Theme.ink : Theme.subtleInk)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.hairline))
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+                .background(Theme.surface.opacity(0.86), in: Theme.controlShape)
+                .overlay(Theme.controlShape.stroke(Theme.hairline))
             }
             .buttonStyle(.plain)
             .disabled(!enabled)
-            .opacity(enabled ? 1.0 : 0.55)
-
-            if !enabled {
-                Text(disabledText)
-                    .font(.caption2)
-                    .foregroundStyle(Theme.subtleInk)
-            }
+            .opacity(enabled ? 1 : 0.52)
+            if !enabled { Text(disabledText).font(.caption2).foregroundStyle(Theme.subtleInk) }
         }
-    }
-
-    private func buttonLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.body.weight(.semibold))
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(16)
-            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 12))
     }
 }

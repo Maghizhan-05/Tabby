@@ -1,10 +1,10 @@
 import SwiftUI
 import SwiftData
 
-/// The top-half analytics canvas with a compact mode selector above a single
-/// chart/ring canvas.
+/// The analytics canvas: one visual at a time, with an intentionally compact selector.
 struct AnalyticsView: View {
     @Query(sort: \Expense.date, order: .reverse) private var expenses: [Expense]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var viewModel: HomeViewModel
 
     var body: some View {
@@ -21,35 +21,38 @@ struct AnalyticsView: View {
                 case .trends: SpendingTrendsView(expenses: expenses)
                 }
             }
+            .id(viewModel.selectedMode)
+            .transition(.opacity.combined(with: .scale(scale: 0.98)))
             .frame(maxWidth: .infinity)
         }
     }
 
     private var selector: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: 5) {
                 ForEach(AnalyticsMode.allCases) { mode in
                     let selected = viewModel.selectedMode == mode
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        if reduceMotion {
                             viewModel.selectedMode = mode
+                        } else {
+                            withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                                viewModel.selectedMode = mode
+                            }
                         }
                     } label: {
                         Text(mode.rawValue)
-                            .font(.footnote.weight(.medium))
-                            .foregroundStyle(selected ? .white : Theme.ink)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
-                            .background(
-                                selected ? Theme.accent : Color.white,
-                                in: Capsule()
-                            )
-                            .overlay(Capsule().stroke(Theme.hairline, lineWidth: selected ? 0 : 1))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(selected ? Theme.paper : Theme.subtleInk)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(selected ? Theme.accent : Color.clear, in: Capsule())
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 2)
+            .padding(4)
+            .background(Theme.elevatedSurface.opacity(0.82), in: Capsule())
         }
     }
 }

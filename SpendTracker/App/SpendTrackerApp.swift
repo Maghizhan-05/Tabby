@@ -14,6 +14,7 @@ struct SpendTrackerApp: App {
                 .onOpenURL { url in
                     handleDeepLink(url)
                 }
+                .preferredColorScheme(.dark)
         }
     }
 

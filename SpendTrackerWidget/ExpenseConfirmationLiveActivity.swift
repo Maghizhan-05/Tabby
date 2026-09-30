@@ -2,7 +2,7 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
-private let confirmAccent = Color(red: 0.44, green: 0.30, blue: 0.85)
+private let confirmAccent = Color(red: 0.90, green: 0.66, blue: 0.22)
 
 /// The Live Activity / Dynamic Island UI for expense confirmation.
 struct ExpenseConfirmationLiveActivity: Widget {

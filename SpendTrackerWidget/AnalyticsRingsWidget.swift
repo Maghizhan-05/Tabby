@@ -30,12 +30,12 @@ struct AnalyticsProvider: TimelineProvider {
 }
 
 private let ringPalette: [Color] = [
-    Color(red: 0.44, green: 0.30, blue: 0.85),
-    Color(red: 0.35, green: 0.55, blue: 0.90),
-    Color(red: 0.30, green: 0.75, blue: 0.65),
-    Color(red: 0.90, green: 0.60, blue: 0.30),
-    Color(red: 0.85, green: 0.40, blue: 0.55),
-    Color(red: 0.55, green: 0.45, blue: 0.80),
+    Color(red: 1.0, green: 0.84, blue: 0.43),
+    Color(red: 0.90, green: 0.66, blue: 0.22),
+    Color(red: 0.97, green: 0.50, blue: 0.20),
+    Color(red: 0.67, green: 0.45, blue: 0.96),
+    Color(red: 0.25, green: 0.70, blue: 0.72),
+    Color(red: 0.96, green: 0.34, blue: 0.46),
 ]
 
 struct AnalyticsRingsWidgetView: View {
@@ -65,9 +65,10 @@ struct AnalyticsRingsWidgetView: View {
                     .rotationEffect(.degrees(-90))
             }
             VStack(spacing: 0) {
-                Text("Today").font(.caption2).foregroundStyle(.secondary)
+                Text("Today").font(.caption2).foregroundStyle(.white.opacity(0.58))
                 Text(currency(entry.todayTotal))
                     .font(.headline.weight(.bold))
+                    .foregroundStyle(.white)
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
             }
@@ -85,9 +86,9 @@ struct AnalyticsRingsWidgetView: View {
                 ForEach(Array(entry.slices.prefix(4).enumerated()), id: \.element.id) { index, slice in
                     HStack(spacing: 6) {
                         Circle().fill(ringPalette[index % ringPalette.count]).frame(width: 7, height: 7)
-                        Text(slice.category).font(.caption2)
+                        Text(slice.category).font(.caption2).foregroundStyle(.white.opacity(0.78))
                         Spacer()
-                        Text(currency(slice.total)).font(.caption2.weight(.medium))
+                        Text(currency(slice.total)).font(.caption2.weight(.medium)).foregroundStyle(.white)
                     }
                 }
                 if entry.slices.isEmpty {
@@ -117,7 +118,7 @@ struct AnalyticsRingsWidget: Widget {
         StaticConfiguration(kind: kind, provider: AnalyticsProvider()) { entry in
             if #available(iOS 17.0, *) {
                 AnalyticsRingsWidgetView(entry: entry)
-                    .containerBackground(.background, for: .widget)
+                    .containerBackground(Color(red: 0.035, green: 0.039, blue: 0.055), for: .widget)
             } else {
                 AnalyticsRingsWidgetView(entry: entry)
             }
