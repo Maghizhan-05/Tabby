@@ -16,16 +16,25 @@ printf '==> Generating Xcode project from project.yml\n'
 xcodegen generate
 
 printf '==> Building %s for %s\n' "$SCHEME" "$SIM"
-# Ad-hoc sign the simulator build (CODE_SIGN_IDENTITY="-") so the App Group
-# entitlement is applied and the group.com.maghizhan.spendtracker container is
-# provisioned — this is what lets the app and widget share ONE SwiftData store.
-# Building with CODE_SIGNING_ALLOWED=NO skips the entitlement codesign pass and
-# the app + widget silently fall back to SEPARATE per-process default stores.
+# Build locally signed rather than disabling signing. The explicit re-sign step
+# below embeds the App Group entitlement in the final simulator bundles.
 xcodebuild -project SpendTracker.xcodeproj -scheme "$SCHEME" \
   -destination "platform=iOS Simulator,name=$SIM" \
   -derivedDataPath "$DERIVED" \
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" \
   build
+
+# Xcode's simulator build signature can omit entitlements even when the target
+# declares CODE_SIGN_ENTITLEMENTS. Re-sign the nested widget first, then its host
+# app, so simctl provisions one App Group container for both processes.
+WIDGET="$APP/PlugIns/SpendTrackerWidget.appex"
+printf '==> Embedding App Group entitlements in simulator bundles\n'
+codesign --force --sign - \
+  --entitlements SpendTrackerWidget/SpendTrackerWidget.entitlements \
+  "$WIDGET"
+codesign --force --sign - \
+  --entitlements SpendTracker/SpendTracker.entitlements \
+  "$APP"
 
 printf '==> Booting simulator (ignore “already booted”)\n'
 xcrun simctl boot "$SIM" 2>/dev/null || true
