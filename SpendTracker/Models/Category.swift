@@ -12,6 +12,9 @@ final class Category {
     /// while newly-created custom categories start as `.local` (0) and get pushed.
     var syncStateRaw: Int
     var remoteId: String?
+    /// Supabase user id that owns this record. Nil for the seeded defaults and
+    /// for legacy rows created before ownership partitioning.
+    var ownerId: String?
 
     var syncState: SyncState {
         get { SyncState(rawValue: syncStateRaw) ?? .local }
@@ -24,7 +27,8 @@ final class Category {
         isDefault: Bool = false,
         sortOrder: Int = 0,
         syncState: SyncState = .local,
-        remoteId: String? = nil
+        remoteId: String? = nil,
+        ownerId: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -32,5 +36,6 @@ final class Category {
         self.sortOrder = sortOrder
         self.syncStateRaw = syncState.rawValue
         self.remoteId = remoteId
+        self.ownerId = ownerId
     }
 }

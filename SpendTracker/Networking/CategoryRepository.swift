@@ -8,6 +8,13 @@ import Supabase
 protocol CategoryRepositoring {
     func upsert(_ category: Category) async throws
     func delete(id: UUID) async throws
+    /// Complete owner-scoped snapshot of the `categories` table.
+    ///
+    /// Implementations MUST derive the user id from the authenticated session
+    /// and throw when it doesn't match `ownerId`, and MUST return every row
+    /// (paginating past Supabase's default 1,000-row cap). Absence-based
+    /// deletion is only sound against a provably complete snapshot.
+    func fetchAll(ownerId: String) async throws -> [RemoteCategoryRow]
 }
 
 #if canImport(Supabase)
@@ -66,4 +73,47 @@ final class SupabaseCategoryRepository: CategoryRepositoring {
             .execute()
         #endif
     }
+
+    /// Page size; stays under Supabase's default 1,000-row response cap.
+    private static let pageSize = 500
+
+    func fetchAll(ownerId: String) async throws -> [RemoteCategoryRow] {
+        guard provider.isConfigured else { throw AuthError.notConfigured }
+        #if canImport(Supabase)
+        guard let client = provider.client else { throw AuthError.notConfigured }
+
+        let sessionUserId = try await Self.authenticatedUserId(client)
+        guard ExpenseOwnership.normalized(ownerId) == sessionUserId else {
+            // Never return an empty snapshot for a mismatched owner: callers
+            // read absence as deletion.
+            throw AuthError.providerUnavailable("Category owner mismatch")
+        }
+
+        let decoder = JSONDecoder()
+        return try await PaginatedSnapshot.fetchAll(pageSize: Self.pageSize) { from, to in
+            let response = try await client
+                .from("categories")
+                .select()
+                .eq("user_id", value: sessionUserId)
+                .order("id", ascending: true)
+                .range(from: from, to: to)
+                .execute()
+            return try decoder.decode([RemoteCategoryRow].self, from: response.data)
+        }
+        #else
+        _ = ownerId
+        return []
+        #endif
+    }
+
+    #if canImport(Supabase)
+    private static func authenticatedUserId(_ client: SupabaseClient) async throws -> String {
+        do {
+            return try await client.auth.session.user.id.uuidString.lowercased()
+        } catch {
+            guard let stored = client.auth.currentSession else { throw error }
+            return stored.user.id.uuidString.lowercased()
+        }
+    }
+    #endif
 }

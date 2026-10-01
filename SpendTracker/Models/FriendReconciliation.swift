@@ -115,12 +115,22 @@ enum FriendReconciliation {
         let ownerId: String?
         let updatedAt: Date
         let syncState: SyncState
+        /// True when this record was previously uploaded. Only such a record
+        /// may be deleted by absence — see `ExpenseReconciliation.LocalRecord`.
+        let hasRemoteIdentity: Bool
 
-        init(id: UUID, ownerId: String?, updatedAt: Date, syncState: SyncState) {
+        init(
+            id: UUID,
+            ownerId: String?,
+            updatedAt: Date,
+            syncState: SyncState,
+            hasRemoteIdentity: Bool = false
+        ) {
             self.id = id
             self.ownerId = ownerId
             self.updatedAt = updatedAt
             self.syncState = syncState
+            self.hasRemoteIdentity = hasRemoteIdentity
         }
     }
 
@@ -129,8 +139,10 @@ enum FriendReconciliation {
     /// - Local `.synced` and the remote row is strictly newer → overwrite.
     /// - Local `.dirty` / `.local` / `.deleted` → remote ignored this cycle;
     ///   the pending local change wins and propagates on the next push.
-    /// - Local `.synced` row absent from the snapshot → delete locally.
-    /// - `.local` / `.dirty` / `.deleted` rows are NEVER deleted by absence.
+    /// - A local row absent from the snapshot is deleted iff it was previously
+    ///   uploaded (`.synced`, or any state carrying a remote identity), which
+    ///   prevents a row deleted elsewhere from being re-uploaded forever.
+    /// - A row that never reached the backend is NEVER deleted by absence.
     /// - Rows belonging to another account are ignored in both directions.
     static func plan(
         local: [LocalRecord],
@@ -166,8 +178,9 @@ enum FriendReconciliation {
             }
         }
 
-        for record in localForOwner
-        where record.syncState == .synced && remoteByID[record.id] == nil {
+        // Absence means "deleted elsewhere" only for a row the backend has seen.
+        for record in localForOwner where remoteByID[record.id] == nil {
+            guard record.syncState == .synced || record.hasRemoteIdentity else { continue }
             plan.deletions.append(record.id)
         }
         plan.deletions.sort { $0.uuidString < $1.uuidString }

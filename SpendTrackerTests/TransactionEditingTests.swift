@@ -22,6 +22,7 @@ final class TransactionEditingTests: XCTestCase {
     private struct NoOpCategoryRepository: CategoryRepositoring {
         func upsert(_ category: SpendTracker.Category) async throws {}
         func delete(id: UUID) async throws {}
+        func fetchAll(ownerId: String) async throws -> [RemoteCategoryRow] { [] }
     }
 
     @MainActor

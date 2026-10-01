@@ -94,17 +94,41 @@ final class SyncEngine {
     }
 
     /// Push any locally-created / dirty custom categories to the backend.
-    /// Only categories whose sync state is not `.synced` are pushed, and each is
-    /// marked `.synced` only after a successful backend write (mirrors expenses).
-    func pushUnsyncedCategories() async {
+    ///
+    /// Seeded defaults (`isDefault`) are never pushed — they exist identically
+    /// on every device and belong to no account. Custom categories are stamped
+    /// with the signed-in owner and `.deleted` tombstones are finalized only
+    /// after the remote delete succeeds (mirrors expenses and friends).
+    func pushUnsyncedCategories(ownerId: String? = nil) async {
+        guard let owner = ExpenseOwnership.normalized(ownerId) else { return }
+
         let descriptor = FetchDescriptor<Category>(
             predicate: #Predicate<Category> { $0.syncStateRaw != 1 }
         )
-        guard let categories = try? modelContext.fetch(descriptor), !categories.isEmpty else { return }
+        guard let fetched = try? modelContext.fetch(descriptor) else { return }
+        let categories = fetched.filter { category in
+            guard !category.isDefault else { return false }
+            return ExpenseOwnership.isAccessible(
+                recordOwnerId: category.ownerId, activeOwnerId: owner
+            )
+        }
+        guard !categories.isEmpty else { return }
 
         for category in categories {
+            // Never re-stamp another account's record.
+            guard let resolvedOwner = ExpenseOwnership.resolvedOwnerId(
+                recordOwnerId: category.ownerId, activeOwnerId: owner
+            ) else { continue }
+
             do {
+                if category.syncState == .deleted {
+                    try await categoryRepository.delete(id: category.id)
+                    modelContext.delete(category)
+                    continue
+                }
+                category.ownerId = resolvedOwner
                 try await categoryRepository.upsert(category)
+                guard category.syncState != SyncState.deleted else { continue }
                 category.remoteId = category.id.uuidString
                 category.syncState = .synced
             } catch {
@@ -113,6 +137,89 @@ final class SyncEngine {
             }
         }
         try? modelContext.save()
+    }
+
+    // MARK: - Bidirectional category sync
+
+    /// Apply the remote custom-category snapshot to the local store.
+    ///
+    /// Same safeguards as expenses and friends: a failed or partial fetch
+    /// returns false without applying anything, so a transport error is never
+    /// mistaken for "everything was deleted".
+    @discardableResult
+    func pullCategories(ownerId: String?) async -> Bool {
+        guard let owner = ExpenseOwnership.normalized(ownerId) else { return false }
+
+        let remote: [RemoteCategoryRow]
+        do {
+            remote = try await categoryRepository.fetchAll(ownerId: owner)
+        } catch {
+            return false
+        }
+
+        guard let localCategories = try? modelContext.fetch(FetchDescriptor<Category>()) else {
+            return false
+        }
+
+        let plan = CategoryReconciliation.plan(
+            local: localCategories.map {
+                CategoryReconciliation.LocalRecord(
+                    id: $0.id,
+                    ownerId: $0.ownerId,
+                    name: $0.name,
+                    sortOrder: $0.sortOrder,
+                    isDefault: $0.isDefault,
+                    syncState: $0.syncState,
+                    hasRemoteIdentity: $0.remoteId != nil
+                )
+            },
+            remote: remote,
+            activeOwnerId: owner
+        )
+        guard !plan.isEmpty else { return false }
+
+        let byID = Dictionary(
+            localCategories.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
+        )
+
+        for row in plan.inserts {
+            modelContext.insert(
+                Category(
+                    id: row.id,
+                    name: row.name,
+                    isDefault: false,
+                    sortOrder: row.sortOrder,
+                    syncState: .synced,
+                    remoteId: row.id.uuidString,
+                    ownerId: owner
+                )
+            )
+        }
+
+        for row in plan.updates {
+            guard let local = byID[row.id] else { continue }
+            local.name = row.name
+            local.sortOrder = row.sortOrder
+            local.remoteId = row.id.uuidString
+            local.syncState = .synced
+        }
+
+        for id in plan.deletions {
+            guard let local = byID[id], !local.isDefault else { continue }
+            modelContext.delete(local)
+        }
+
+        try? modelContext.save()
+        return true
+    }
+
+    /// Reconcile categories against a complete remote snapshot, then push.
+    /// Pull-before-push — see `syncExpenses` for why the ordering matters.
+    @discardableResult
+    func syncCategories(ownerId: String?) async -> Bool {
+        let changed = await pullCategories(ownerId: ownerId)
+        await pushUnsyncedCategories(ownerId: ownerId)
+        return changed
     }
 
     /// Push local/dirty friends and finalize locally-deleted friends only after
@@ -159,7 +266,7 @@ final class SyncEngine {
 
     /// Convenience: push everything that needs syncing for the signed-in user.
     func pushAll(ownerId: String? = nil) async {
-        await pushUnsyncedCategories()
+        await pushUnsyncedCategories(ownerId: ownerId)
         await pushUnsyncedExpenses(ownerId: ownerId)
         await pushUnsyncedFriends(ownerId: ownerId)
     }
@@ -192,7 +299,11 @@ final class SyncEngine {
                     id: $0.id,
                     ownerId: $0.ownerId,
                     updatedAt: $0.updatedAt,
-                    syncState: $0.syncState
+                    syncState: $0.syncState,
+                    // Friend has no remoteId column; `.dirty` is only ever set
+                    // by editing a previously `.synced` row, so it is the
+                    // reliable "the backend has seen this" signal.
+                    hasRemoteIdentity: $0.syncState == .dirty
                 )
             },
             remote: remote,
@@ -237,25 +348,30 @@ final class SyncEngine {
         return true
     }
 
-    /// Push local friend work, then reconcile against a complete remote
-    /// snapshot. Push-before-pull is load-bearing for absence-based deletion.
+    /// Reconcile against a complete remote snapshot, then push local work.
+    /// Pull-before-push — see `syncExpenses` for why the ordering matters.
     @discardableResult
     func syncFriends(ownerId: String?) async -> Bool {
+        let changed = await pullFriends(ownerId: ownerId)
         await pushUnsyncedFriends(ownerId: ownerId)
-        return await pullFriends(ownerId: ownerId)
+        return changed
     }
 
     // MARK: - Bidirectional expense sync
 
-    /// Push local work, then reconcile against a complete remote snapshot.
+    /// Reconcile against a complete remote snapshot, then push local work.
     ///
-    /// The ordering is load-bearing: absence from the snapshot is read as
-    /// "deleted on another device", which is only sound once everything local
-    /// has been uploaded. Never call `pullExpenses` without pushing first.
+    /// Pull-before-push is load-bearing for the resurrection bug: if a stale
+    /// local row that was deleted on another device were pushed first, the
+    /// upload would re-create it remotely and the snapshot would then "confirm"
+    /// it forever. Pulling first lets absence delete it; local tombstones and
+    /// genuinely new/edited rows are still pushed immediately afterwards, so
+    /// nothing local is lost.
     @discardableResult
     func syncExpenses(ownerId: String?) async -> Bool {
+        let changed = await pullExpenses(ownerId: ownerId)
         await pushUnsyncedExpenses(ownerId: ownerId)
-        return await pullExpenses(ownerId: ownerId)
+        return changed
     }
 
     /// Apply the remote snapshot to the local store.
@@ -285,7 +401,8 @@ final class SyncEngine {
                     id: $0.id,
                     ownerId: $0.ownerId,
                     updatedAt: $0.updatedAt,
-                    syncState: $0.syncState
+                    syncState: $0.syncState,
+                    hasRemoteIdentity: $0.remoteId != nil
                 )
             },
             remote: remote,

@@ -64,6 +64,7 @@ final class BidirectionalSyncIntegrationTests: XCTestCase {
     private struct NoOpCategoryRepository: CategoryRepositoring {
         func upsert(_ category: SpendTracker.Category) async throws {}
         func delete(id: UUID) async throws {}
+        func fetchAll(ownerId: String) async throws -> [RemoteCategoryRow] { [] }
     }
 
     @MainActor
@@ -251,8 +252,14 @@ final class BidirectionalSyncIntegrationTests: XCTestCase {
 
     // MARK: - Offline edit vs. remote delete
 
+    /// Superseded expectation note: this test previously asserted that an
+    /// offline edit was pushed back up, which is exactly the resurrection the
+    /// user reported — a row deleted on another device reappeared. The approved
+    /// rule is now that a complete owner-scoped snapshot wins over a stale
+    /// local row that the backend has already seen, so the remote delete is
+    /// honoured and the pending edit is dropped rather than re-created.
     @MainActor
-    func testOfflineEditSurvivesARemoteDeleteAndIsRestoredOnPush() async throws {
+    func testOfflineEditLosesToARemoteDeleteAndIsNotResurrected() async throws {
         let context = try makeContext()
         let repository = FakeExpenseRepository(sessionOwnerId: Self.ownerA)
         let id = UUID()
@@ -266,8 +273,36 @@ final class BidirectionalSyncIntegrationTests: XCTestCase {
 
         await makeEngine(context, repository).syncExpenses(ownerId: Self.ownerA)
 
-        // Deterministic last-writer-wins: the local edit is pushed back up and
-        // kept locally rather than being silently discarded.
+        // The row carries a remote identity, so its absence from the complete
+        // snapshot means "deleted elsewhere" and wins over the local edit.
+        XCTAssertEqual(
+            repository.upsertedIDs, [],
+            "a row deleted on another device must never be re-uploaded"
+        )
+        XCTAssertTrue(try context.fetch(FetchDescriptor<Expense>()).isEmpty)
+        XCTAssertNil(repository.rows[id], "the backend row must stay deleted")
+    }
+
+    /// The counterpart that must keep working: an offline edit to a row that
+    /// still exists remotely is preserved and pushed.
+    @MainActor
+    func testOfflineEditSurvivesWhenTheRemoteRowStillExists() async throws {
+        let context = try makeContext()
+        let repository = FakeExpenseRepository(sessionOwnerId: Self.ownerA)
+        let id = UUID()
+        repository.rows[id] = RemoteExpenseRow(
+            id: id, userId: Self.ownerA, amount: 10, categoryName: "Food",
+            note: nil, date: t0, createdAt: t0, updatedAt: t0
+        )
+        let local = Expense(
+            id: id, ownerId: Self.ownerA, amount: 55, categoryName: "Food",
+            updatedAt: t1, syncState: .dirty, remoteId: id.uuidString
+        )
+        context.insert(local)
+        try context.save()
+
+        await makeEngine(context, repository).syncExpenses(ownerId: Self.ownerA)
+
         XCTAssertEqual(repository.upsertedIDs, [id])
         XCTAssertEqual(try context.fetch(FetchDescriptor<Expense>()).count, 1)
         XCTAssertEqual(local.amount, 55)

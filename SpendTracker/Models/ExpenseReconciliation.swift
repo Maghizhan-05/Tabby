@@ -147,12 +147,23 @@ enum ExpenseReconciliation {
         let ownerId: String?
         let updatedAt: Date
         let syncState: SyncState
+        /// True when this record was previously uploaded (it carries a remote
+        /// id). Only such a record may be deleted by absence: for a row that
+        /// never reached the backend, absence tells us nothing.
+        let hasRemoteIdentity: Bool
 
-        init(id: UUID, ownerId: String?, updatedAt: Date, syncState: SyncState) {
+        init(
+            id: UUID,
+            ownerId: String?,
+            updatedAt: Date,
+            syncState: SyncState,
+            hasRemoteIdentity: Bool = false
+        ) {
             self.id = id
             self.ownerId = ownerId
             self.updatedAt = updatedAt
             self.syncState = syncState
+            self.hasRemoteIdentity = hasRemoteIdentity
         }
     }
 
@@ -164,9 +175,12 @@ enum ExpenseReconciliation {
     /// - Local `.dirty` / `.local` / `.deleted` → the remote row is ignored this
     ///   cycle; the pending local change wins and the next push propagates it
     ///   (documented last-writer-wins, never a silent drop).
-    /// - Local `.synced` row absent from the snapshot → delete locally.
-    /// - Local `.local` / `.dirty` / `.deleted` rows are NEVER deleted by
-    ///   absence: they have not been pushed yet, or their delete is in flight.
+    /// - A local row absent from the snapshot is deleted **iff it was
+    ///   previously uploaded** — i.e. `.synced`, or any state carrying a remote
+    ///   identity. This is what stops a stale row deleted on another device
+    ///   from being re-uploaded and resurrected forever.
+    /// - A `.local` row (or any row that never reached the backend) is NEVER
+    ///   deleted by absence: it has not been pushed yet.
     /// - Rows belonging to another account (or a remote row whose `user_id`
     ///   isn't the active owner) are ignored entirely in both directions.
     static func plan(
@@ -208,8 +222,11 @@ enum ExpenseReconciliation {
             }
         }
 
-        for record in localForOwner
-        where record.syncState == .synced && remoteByID[record.id] == nil {
+        // Absence means "deleted elsewhere" only for a row the backend has
+        // actually seen. A `.synced` row is uploaded by definition; a `.dirty`
+        // or `.deleted` row counts once it carries a remote identity.
+        for record in localForOwner where remoteByID[record.id] == nil {
+            guard record.syncState == .synced || record.hasRemoteIdentity else { continue }
             plan.deletions.append(record.id)
         }
         plan.deletions.sort { $0.uuidString < $1.uuidString }
