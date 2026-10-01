@@ -15,6 +15,8 @@ final class TransactionEditingTests: XCTestCase {
         }
 
         func delete(id: UUID) async throws {}
+
+        func fetchAll(ownerId: String) async throws -> [RemoteExpenseRow] { [] }
     }
 
     private struct NoOpCategoryRepository: CategoryRepositoring {

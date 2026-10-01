@@ -104,19 +104,32 @@ struct RecentEntriesListView: View {
         .sheet(item: $expenseBeingEdited) { expense in
             ExpenseEditSheetView(expense: expense)
         }
-        // Lifecycle retry: any edit left `.dirty` by a failed push is retried
-        // when Recent Activity appears or the app returns to the foreground.
-        .task { await pushPendingExpenses() }
+        // Lifecycle sync: push anything left `.dirty` by a failed push, then
+        // pull rows created/deleted on another device. Covers "after login"
+        // (fresh mount when LoginView swaps to the TabView), "on foreground",
+        // and account switches.
+        .task { await syncExpenses() }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
-            Task { await pushPendingExpenses() }
+            Task { await syncExpenses() }
         }
         // Account switch: close any open editor so one user's row can never be
         // edited under another user's session, and resync for the new owner.
         .onChange(of: ownerId) { _, _ in
             expenseBeingEdited = nil
-            Task { await pushPendingExpenses() }
+            Task { await syncExpenses() }
         }
+    }
+
+    private func syncExpenses() async {
+        guard let ownerId else { return }
+        let changed = await SyncEngine(
+            modelContext: modelContext,
+            expenseRepository: SupabaseExpenseRepository(),
+            categoryRepository: SupabaseCategoryRepository()
+        ).syncExpenses(ownerId: ownerId)
+        // Rows pulled from another device change the widget's totals too.
+        if changed { WidgetCenter.shared.reloadAllTimelines() }
     }
 
     private func pushPendingExpenses() async {

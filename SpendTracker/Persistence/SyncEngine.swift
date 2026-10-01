@@ -152,4 +152,92 @@ final class SyncEngine {
         await pushUnsyncedExpenses(ownerId: ownerId)
         await pushUnsyncedFriends(ownerId: ownerId)
     }
+
+    // MARK: - Bidirectional expense sync
+
+    /// Push local work, then reconcile against a complete remote snapshot.
+    ///
+    /// The ordering is load-bearing: absence from the snapshot is read as
+    /// "deleted on another device", which is only sound once everything local
+    /// has been uploaded. Never call `pullExpenses` without pushing first.
+    @discardableResult
+    func syncExpenses(ownerId: String?) async -> Bool {
+        await pushUnsyncedExpenses(ownerId: ownerId)
+        return await pullExpenses(ownerId: ownerId)
+    }
+
+    /// Apply the remote snapshot to the local store.
+    ///
+    /// Returns true when the local store changed (so the caller can reload
+    /// widget timelines). A failed/partial fetch returns false WITHOUT applying
+    /// anything — a truncated snapshot must never be mistaken for deletions.
+    @discardableResult
+    func pullExpenses(ownerId: String?) async -> Bool {
+        guard let activeOwner = ExpenseOwnership.normalized(ownerId) else { return false }
+
+        let remote: [RemoteExpenseRow]
+        do {
+            remote = try await expenseRepository.fetchAll(ownerId: activeOwner)
+        } catch {
+            // Abort before any deletion: an error is not an empty account.
+            return false
+        }
+
+        guard let localExpenses = try? modelContext.fetch(FetchDescriptor<Expense>()) else {
+            return false
+        }
+
+        let plan = ExpenseReconciliation.plan(
+            local: localExpenses.map {
+                ExpenseReconciliation.LocalRecord(
+                    id: $0.id,
+                    ownerId: $0.ownerId,
+                    updatedAt: $0.updatedAt,
+                    syncState: $0.syncState
+                )
+            },
+            remote: remote,
+            activeOwnerId: activeOwner
+        )
+        guard !plan.isEmpty else { return false }
+
+        var byID: [UUID: Expense] = [:]
+        for expense in localExpenses { byID[expense.id] = expense }
+
+        for row in plan.inserts {
+            let expense = Expense(
+                id: row.id,
+                ownerId: activeOwner,
+                amount: row.amount,
+                categoryName: row.categoryName,
+                note: row.note,
+                date: row.date,
+                createdAt: row.createdAt,
+                updatedAt: row.updatedAt,
+                syncState: .synced,
+                remoteId: row.id.uuidString
+            )
+            modelContext.insert(expense)
+        }
+
+        for update in plan.updates {
+            guard let expense = byID[update.id] else { continue }
+            expense.amount = update.row.amount
+            expense.categoryName = update.row.categoryName
+            expense.note = Expense.normalizedNote(update.row.note)
+            expense.date = update.row.date
+            expense.updatedAt = update.row.updatedAt
+            expense.ownerId = activeOwner
+            expense.remoteId = update.row.id.uuidString
+            expense.syncState = .synced
+        }
+
+        for id in plan.deletions {
+            guard let expense = byID[id] else { continue }
+            modelContext.delete(expense)
+        }
+
+        try? modelContext.save()
+        return true
+    }
 }

@@ -68,6 +68,7 @@ final class LiveSyncIntegrationTests: XCTestCase {
             throw DeliberateFailure()
         }
         func delete(id: UUID) async throws {}
+        func fetchAll(ownerId: String) async throws -> [RemoteExpenseRow] { [] }
     }
 
     private struct NoOpCategoryRepo: CategoryRepositoring {

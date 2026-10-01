@@ -24,6 +24,8 @@ final class ExpenseOwnershipAndSyncTests: XCTestCase {
             if let deleteError { throw deleteError }
             deletedIDs.append(id)
         }
+
+        func fetchAll(ownerId: String) async throws -> [RemoteExpenseRow] { [] }
     }
 
     /// Suspends the first upsert until the test releases it, so an edit can
@@ -43,6 +45,8 @@ final class ExpenseOwnershipAndSyncTests: XCTestCase {
         }
 
         func delete(id: UUID) async throws {}
+
+        func fetchAll(ownerId: String) async throws -> [RemoteExpenseRow] { [] }
 
         func release() {
             continuation?.resume()

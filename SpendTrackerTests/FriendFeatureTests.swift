@@ -79,6 +79,7 @@ final class FriendFeatureTests: XCTestCase {
 private struct NoOpExpenseRepository: ExpenseRepositoring {
     func upsert(_ expense: Expense) async throws -> String { expense.id.uuidString }
     func delete(id: UUID) async throws {}
+    func fetchAll(ownerId: String) async throws -> [RemoteExpenseRow] { [] }
 }
 
 private struct NoOpCategoryRepository: CategoryRepositoring {
