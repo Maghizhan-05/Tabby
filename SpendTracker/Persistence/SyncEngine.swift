@@ -9,6 +9,9 @@ final class SyncEngine {
     private let expenseRepository: ExpenseRepositoring
     private let categoryRepository: CategoryRepositoring
     private let friendRepository: FriendRepositoring
+    /// Tail of the serialized expense-push chain. Overlapping pushes queue
+    /// behind each other instead of interleaving upserts for the same record.
+    private var pushGate: Task<Void, Never>?
 
     init(
         modelContext: ModelContext,
@@ -22,19 +25,66 @@ final class SyncEngine {
         self.friendRepository = friendRepository
     }
 
-    /// Push all locally-created or dirty expenses to the backend.
-    /// Idempotent: uses upsert-by-UUID so re-running is safe.
-    func pushUnsyncedExpenses() async {
+    /// Push all locally-created or dirty expenses belonging to the signed-in
+    /// user to the backend. Idempotent: uses upsert-by-UUID so re-running is
+    /// safe. Records owned by another account are never uploaded under this
+    /// session's credentials, and locally-deleted records are removed from the
+    /// local store only after their remote delete succeeds.
+    ///
+    /// Concurrency: pushes are serialized per engine-owned task via
+    /// `pushGate`, and a record is marked `.synced` only when the revision that
+    /// was uploaded is still the current one — an edit made while an upload is
+    /// in flight stays dirty and is retried instead of being silently lost.
+    func pushUnsyncedExpenses(ownerId: String?) async {
+        guard let activeOwner = ExpenseOwnership.normalized(ownerId) else { return }
+
+        // Serialize overlapping pushes: a second caller waits for the first.
+        let previous = pushGate
+        let task = Task { @MainActor in
+            await previous?.value
+            await self.performExpensePush(activeOwner: activeOwner)
+        }
+        pushGate = task
+        await task.value
+        if pushGate == task { pushGate = nil }
+    }
+
+    private func performExpensePush(activeOwner: String) async {
         let predicate = #Predicate<Expense> { $0.syncStateRaw != 1 }
         let descriptor = FetchDescriptor<Expense>(predicate: predicate)
-        guard let unsynced = try? modelContext.fetch(descriptor), !unsynced.isEmpty else { return }
+        guard let fetched = try? modelContext.fetch(descriptor), !fetched.isEmpty else { return }
 
-        for expense in unsynced {
+        // Only this account's records (plus unclaimed legacy rows) are pushed.
+        let pushable = fetched.filter {
+            ExpenseOwnership.isAccessible(recordOwnerId: $0.ownerId, activeOwnerId: activeOwner)
+        }
+        guard !pushable.isEmpty else { return }
+
+        for expense in pushable {
+            // Re-check ownership at push time; never re-stamp another account.
+            guard let owner = ExpenseOwnership.resolvedOwnerId(
+                recordOwnerId: expense.ownerId,
+                activeOwnerId: activeOwner
+            ) else { continue }
+
             do {
-                let remoteId = try await expenseRepository.upsert(expense)
-                expense.remoteId = remoteId
-                expense.syncState = .synced
-                expense.updatedAt = Date()
+                if expense.syncState == .deleted {
+                    // Tombstone: the local row disappears only once the remote
+                    // row is gone, so a deletion can never be lost offline.
+                    try await expenseRepository.delete(id: expense.id)
+                    modelContext.delete(expense)
+                } else {
+                    expense.ownerId = owner
+                    let uploadedRevision = expense.revision
+                    let remoteId = try await expenseRepository.upsert(expense)
+                    // Guard against a concurrent edit (or delete) landing while
+                    // the upload was suspended.
+                    guard expense.revision == uploadedRevision,
+                          expense.syncState != .deleted else { continue }
+                    expense.remoteId = remoteId
+                    expense.syncState = .synced
+                    expense.updatedAt = Date()
+                }
             } catch {
                 // Leave unsynced; will retry on next push.
                 continue
@@ -96,10 +146,10 @@ final class SyncEngine {
         try? modelContext.save()
     }
 
-    /// Convenience: push everything that needs syncing.
+    /// Convenience: push everything that needs syncing for the signed-in user.
     func pushAll(ownerId: String? = nil) async {
         await pushUnsyncedCategories()
-        await pushUnsyncedExpenses()
+        await pushUnsyncedExpenses(ownerId: ownerId)
         await pushUnsyncedFriends(ownerId: ownerId)
     }
 }

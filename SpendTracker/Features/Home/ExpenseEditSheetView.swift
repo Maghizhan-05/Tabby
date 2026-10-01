@@ -4,6 +4,7 @@ import SwiftData
 struct ExpenseEditSheetView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var auth: AuthViewModel
     @Query(sort: \Category.sortOrder) private var categories: [Category]
     @StateObject private var viewModel: ExpenseEditViewModel
     @FocusState private var amountFocused: Bool
@@ -159,7 +160,11 @@ struct ExpenseEditSheetView: View {
                     .foregroundStyle(.red)
             }
             Button {
-                if viewModel.save(categories: categories, context: modelContext) {
+                if viewModel.save(
+                    categories: categories,
+                    context: modelContext,
+                    ownerId: auth.session?.userId
+                ) {
                     dismiss()
                 }
             } label: {

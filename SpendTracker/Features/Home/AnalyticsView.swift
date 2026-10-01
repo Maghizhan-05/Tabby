@@ -3,9 +3,15 @@ import SwiftData
 
 /// The analytics canvas: one visual at a time, with an intentionally compact selector.
 struct AnalyticsView: View {
-    @Query(sort: \Expense.date, order: .reverse) private var expenses: [Expense]
+    @Query(sort: \Expense.date, order: .reverse) private var allExpenses: [Expense]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject private var auth: AuthViewModel
     @ObservedObject var viewModel: HomeViewModel
+
+    /// Analytics only ever aggregates the signed-in account's expenses.
+    private var expenses: [Expense] {
+        ExpenseOwnership.visibleExpenses(allExpenses, activeOwnerId: auth.session?.userId)
+    }
 
     var body: some View {
         VStack(spacing: 14) {

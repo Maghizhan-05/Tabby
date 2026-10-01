@@ -249,7 +249,7 @@ final class LiveSyncIntegrationTests: XCTestCase {
         let container = try ModelContainer(for: schema, configurations: [config])
         let context = ModelContext(container)
 
-        let expense = Expense(amount: Decimal(string: "9.99")!, categoryName: "QA-Fail")
+        let expense = Expense(ownerId: "owner-a", amount: Decimal(string: "9.99")!, categoryName: "QA-Fail")
         XCTAssertEqual(expense.syncState, .local, "precondition: starts local")
         context.insert(expense)
         try context.save()
@@ -259,7 +259,7 @@ final class LiveSyncIntegrationTests: XCTestCase {
             expenseRepository: FailingExpenseRepo(),
             categoryRepository: NoOpCategoryRepo()
         )
-        await engine.pushUnsyncedExpenses()
+        await engine.pushUnsyncedExpenses(ownerId: "owner-a")
 
         // The deliberately-failing upsert must NOT have marked the record synced.
         let fetched = try context.fetch(FetchDescriptor<Expense>())

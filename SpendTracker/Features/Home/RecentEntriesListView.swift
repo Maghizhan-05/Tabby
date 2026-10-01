@@ -16,8 +16,17 @@ enum RecentEntryPresentation {
 struct RecentEntriesListView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
-    @Query(sort: \Expense.date, order: .reverse) private var expenses: [Expense]
+    @EnvironmentObject private var auth: AuthViewModel
+    @Query(sort: \Expense.date, order: .reverse) private var allExpenses: [Expense]
     @State private var expenseBeingEdited: Expense?
+
+    private var ownerId: String? { auth.session?.userId }
+
+    /// Only the signed-in account's expenses are ever rendered; tombstones
+    /// pending remote deletion stay hidden.
+    private var expenses: [Expense] {
+        ExpenseOwnership.visibleExpenses(allExpenses, activeOwnerId: ownerId)
+    }
 
     var body: some View {
         Group {
@@ -102,14 +111,21 @@ struct RecentEntriesListView: View {
             guard phase == .active else { return }
             Task { await pushPendingExpenses() }
         }
+        // Account switch: close any open editor so one user's row can never be
+        // edited under another user's session, and resync for the new owner.
+        .onChange(of: ownerId) { _, _ in
+            expenseBeingEdited = nil
+            Task { await pushPendingExpenses() }
+        }
     }
 
     private func pushPendingExpenses() async {
+        guard let ownerId else { return }
         await SyncEngine(
             modelContext: modelContext,
             expenseRepository: SupabaseExpenseRepository(),
             categoryRepository: SupabaseCategoryRepository()
-        ).pushUnsyncedExpenses()
+        ).pushUnsyncedExpenses(ownerId: ownerId)
     }
 
     private func delete(at offsets: IndexSet) {
@@ -120,10 +136,31 @@ struct RecentEntriesListView: View {
         commitDeletion(of: [expense])
     }
 
+    /// A synced expense is tombstoned (`.deleted`) and removed locally only
+    /// after its remote delete succeeds, so deleting on one device can never
+    /// leave an orphaned row in the backend. Never-pushed records are dropped
+    /// immediately. Records owned by another account are refused outright.
     private func commitDeletion(of doomed: [Expense]) {
-        for expense in doomed { modelContext.delete(expense) }
+        var needsSync = false
+        for expense in doomed {
+            guard ExpenseOwnership.isAccessible(
+                recordOwnerId: expense.ownerId,
+                activeOwnerId: ownerId
+            ) else { continue }
+
+            switch ExpenseOwnership.deletionPlan(for: expense) {
+            case .removeLocally:
+                modelContext.delete(expense)
+            case .tombstone:
+                expense.syncState = .deleted
+                expense.revision += 1
+                expense.updatedAt = Date()
+                needsSync = true
+            }
+        }
         try? modelContext.save()
         // Keep the widget's shared-store view in sync after a deletion.
         WidgetCenter.shared.reloadAllTimelines()
+        if needsSync { Task { await pushPendingExpenses() } }
     }
 }

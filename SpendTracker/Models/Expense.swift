@@ -22,6 +22,14 @@ final class Expense {
     var updatedAt: Date
     var syncStateRaw: Int
     var remoteId: String?
+    /// Supabase user id that owns this record. Nil only for legacy rows created
+    /// before ownership partitioning; those are claimed by the next signed-in
+    /// user on the first push and are never re-stamped afterwards.
+    var ownerId: String?
+    /// Monotonic local revision, bumped on every local edit. A push may only
+    /// mark a record `.synced` when the revision it uploaded is still current,
+    /// so an edit made while an upload is in flight is never lost.
+    var revision: Int = 0
 
     var syncState: SyncState {
         get { SyncState(rawValue: syncStateRaw) ?? .local }
@@ -30,6 +38,7 @@ final class Expense {
 
     init(
         id: UUID = UUID(),
+        ownerId: String? = nil,
         amount: Decimal,
         categoryName: String,
         note: String? = nil,
@@ -37,7 +46,8 @@ final class Expense {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         syncState: SyncState = .local,
-        remoteId: String? = nil
+        remoteId: String? = nil,
+        revision: Int = 0
     ) {
         self.id = id
         self.amount = amount
@@ -48,6 +58,8 @@ final class Expense {
         self.updatedAt = updatedAt
         self.syncStateRaw = syncState.rawValue
         self.remoteId = remoteId
+        self.ownerId = ownerId
+        self.revision = revision
     }
 
     static func normalizedNote(_ note: String?) -> String? {

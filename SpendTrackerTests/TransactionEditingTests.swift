@@ -3,6 +3,9 @@ import SwiftData
 @testable import SpendTracker
 
 final class TransactionEditingTests: XCTestCase {
+    /// Owner of every fixture expense in this suite.
+    private static let owner = "owner-a"
+
     private final class RecordingExpenseRepository: ExpenseRepositoring {
         private(set) var upsertedIDs: [UUID] = []
 
@@ -30,6 +33,7 @@ final class TransactionEditingTests: XCTestCase {
     func testEditPrefillsAmountCategoryDateAndNote() {
         let date = Date(timeIntervalSince1970: 1_800_000_000)
         let expense = Expense(
+            ownerId: Self.owner,
             amount: Decimal(string: "42.75")!,
             categoryName: "Food",
             note: "Team lunch",
@@ -51,6 +55,7 @@ final class TransactionEditingTests: XCTestCase {
         let originalCreatedAt = Date(timeIntervalSince1970: 1_700_000_000)
         let expense = Expense(
             id: originalID,
+            ownerId: Self.owner,
             amount: 10,
             categoryName: "Food",
             date: originalCreatedAt,
@@ -65,7 +70,7 @@ final class TransactionEditingTests: XCTestCase {
         viewModel.noteText = "Airport ride"
         viewModel.selectedDate = Date(timeIntervalSince1970: 1_800_000_000)
 
-        XCTAssertTrue(viewModel.save(categories: [], context: context))
+        XCTAssertTrue(viewModel.save(categories: [], context: context, ownerId: Self.owner))
 
         let fetched = try context.fetch(FetchDescriptor<Expense>())
         XCTAssertEqual(fetched.count, 1)
@@ -83,6 +88,7 @@ final class TransactionEditingTests: XCTestCase {
         let originalUpdatedAt = Date(timeIntervalSince1970: 1_700_000_000)
         let editedAt = Date(timeIntervalSince1970: 1_800_000_100)
         let expense = Expense(
+            ownerId: Self.owner,
             amount: 10,
             categoryName: "Food",
             updatedAt: originalUpdatedAt,
@@ -100,7 +106,7 @@ final class TransactionEditingTests: XCTestCase {
         )
         viewModel.amountText = "11"
 
-        XCTAssertTrue(viewModel.save(categories: [], context: context))
+        XCTAssertTrue(viewModel.save(categories: [], context: context, ownerId: Self.owner))
         XCTAssertEqual(expense.updatedAt, editedAt)
         XCTAssertGreaterThan(expense.updatedAt, originalUpdatedAt)
         XCTAssertEqual(expense.syncState, .dirty)
@@ -111,7 +117,7 @@ final class TransactionEditingTests: XCTestCase {
     @MainActor
     func testInvalidEditDoesNotMutateExpenseOrReloadWidgets() throws {
         let context = try makeContext()
-        let expense = Expense(amount: 10, categoryName: "Food", note: "Original")
+        let expense = Expense(ownerId: Self.owner, amount: 10, categoryName: "Food", note: "Original")
         context.insert(expense)
         try context.save()
         var reloadCount = 0
@@ -122,13 +128,13 @@ final class TransactionEditingTests: XCTestCase {
 
         viewModel.amountText = "0"
         XCTAssertFalse(viewModel.canSave)
-        XCTAssertFalse(viewModel.save(categories: [], context: context))
+        XCTAssertFalse(viewModel.save(categories: [], context: context, ownerId: Self.owner))
         XCTAssertEqual(viewModel.notice, "Enter a valid amount.")
 
         viewModel.amountText = "12"
         viewModel.categoryQuery = "   "
         XCTAssertFalse(viewModel.canSave)
-        XCTAssertFalse(viewModel.save(categories: [], context: context))
+        XCTAssertFalse(viewModel.save(categories: [], context: context, ownerId: Self.owner))
         XCTAssertEqual(viewModel.notice, "Choose a category.")
 
         XCTAssertEqual(expense.amount, 10)
@@ -139,7 +145,7 @@ final class TransactionEditingTests: XCTestCase {
 
     @MainActor
     func testEditNoteIsCappedAtMaximumLength() {
-        let expense = Expense(amount: 10, categoryName: "Food")
+        let expense = Expense(ownerId: Self.owner, amount: 10, categoryName: "Food")
         let viewModel = ExpenseEditViewModel(expense: expense)
 
         viewModel.noteText = String(repeating: "n", count: Expense.maximumNoteLength + 10)
@@ -152,6 +158,7 @@ final class TransactionEditingTests: XCTestCase {
         let context = try makeContext()
         let expense = Expense(
             id: UUID(),
+            ownerId: Self.owner,
             amount: 10,
             categoryName: "Food",
             syncState: .dirty,
@@ -166,7 +173,7 @@ final class TransactionEditingTests: XCTestCase {
             categoryRepository: NoOpCategoryRepository()
         )
 
-        await engine.pushUnsyncedExpenses()
+        await engine.pushUnsyncedExpenses(ownerId: Self.owner)
 
         XCTAssertEqual(repository.upsertedIDs, [expense.id])
         XCTAssertEqual(expense.remoteId, expense.id.uuidString)

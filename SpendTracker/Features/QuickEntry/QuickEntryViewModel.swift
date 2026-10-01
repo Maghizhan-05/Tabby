@@ -68,15 +68,22 @@ final class QuickEntryViewModel: ObservableObject {
         return query
     }
 
-    /// Saves the expense locally-first. Returns the saved Expense on success.
+    /// Saves the expense locally-first, stamped with the signed-in account's
+    /// owner id so it can never be read or uploaded by another account.
+    /// Returns the saved Expense on success.
     @discardableResult
-    func submit(categories: [Category], context: ModelContext) -> Expense? {
+    func submit(categories: [Category], context: ModelContext, ownerId: String?) -> Expense? {
         guard let amount, amount > 0 else {
             notice = "Enter a valid amount."
             return nil
         }
+        guard let owner = ExpenseOwnership.normalized(ownerId) else {
+            notice = "Sign in to save this spend."
+            return nil
+        }
         let categoryName = resolveCategory(categories, context: context)
         let expense = Expense(
+            ownerId: owner,
             amount: amount,
             categoryName: categoryName,
             note: normalizedNote,

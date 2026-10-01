@@ -19,7 +19,7 @@ final class ExpenseEditViewModel: ObservableObject {
     private let expense: Expense
     private let now: () -> Date
     private let reloadWidgetTimelines: () -> Void
-    private let pushExpenses: (ModelContext) async -> Void
+    private let pushExpenses: (ModelContext, String?) async -> Void
 
     init(
         expense: Expense,
@@ -27,12 +27,12 @@ final class ExpenseEditViewModel: ObservableObject {
         reloadWidgetTimelines: @escaping () -> Void = {
             WidgetCenter.shared.reloadAllTimelines()
         },
-        pushExpenses: @escaping (ModelContext) async -> Void = { context in
+        pushExpenses: @escaping (ModelContext, String?) async -> Void = { context, ownerId in
             await SyncEngine(
                 modelContext: context,
                 expenseRepository: SupabaseExpenseRepository(),
                 categoryRepository: SupabaseCategoryRepository()
-            ).pushUnsyncedExpenses()
+            ).pushUnsyncedExpenses(ownerId: ownerId)
         }
     ) {
         self.expense = expense
@@ -55,7 +55,7 @@ final class ExpenseEditViewModel: ObservableObject {
     }
 
     @discardableResult
-    func save(categories: [Category], context: ModelContext) -> Bool {
+    func save(categories: [Category], context: ModelContext, ownerId: String?) -> Bool {
         guard let amount, amount > 0 else {
             notice = "Enter a valid amount."
             return false
@@ -64,6 +64,16 @@ final class ExpenseEditViewModel: ObservableObject {
         let trimmedCategory = categoryQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedCategory.isEmpty else {
             notice = "Choose a category."
+            return false
+        }
+
+        // Refuse to edit a record belonging to another account (e.g. a stale
+        // sheet left open across a sign-out/sign-in).
+        guard ExpenseOwnership.isAccessible(
+            recordOwnerId: expense.ownerId,
+            activeOwnerId: ownerId
+        ) else {
+            notice = "This spend belongs to another account."
             return false
         }
 
@@ -83,6 +93,9 @@ final class ExpenseEditViewModel: ObservableObject {
         expense.note = Expense.normalizedNote(noteText)
         expense.date = selectedDate
         expense.updatedAt = now()
+        // Bump the revision so a push that is already in flight for the older
+        // revision cannot mark this newer edit `.synced`.
+        expense.revision += 1
         if expense.syncState == .synced {
             expense.syncState = .dirty
         }
@@ -92,7 +105,7 @@ final class ExpenseEditViewModel: ObservableObject {
             reloadWidgetTimelines()
             // Push the now-dirty edit. A failure leaves it dirty for the next
             // sync attempt rather than silently stranding the change locally.
-            Task { await pushExpenses(context) }
+            Task { await pushExpenses(context, ownerId) }
             notice = nil
             return true
         } catch {

@@ -4,6 +4,7 @@ import SwiftData
 struct QuickEntrySheetView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var auth: AuthViewModel
     @Query(sort: \Category.sortOrder) private var categories: [Category]
     @StateObject private var viewModel = QuickEntryViewModel()
     @FocusState private var amountFocused: Bool
@@ -145,7 +146,11 @@ struct QuickEntrySheetView: View {
 
 
     private func submit() {
-        guard let expense = viewModel.submit(categories: categories, context: modelContext) else { return }
+        guard let expense = viewModel.submit(
+            categories: categories,
+            context: modelContext,
+            ownerId: auth.session?.userId
+        ) else { return }
         LiveActivityManager.shared.startConfirmation(amount: expense.amount, category: expense.categoryName)
         dismiss()
     }

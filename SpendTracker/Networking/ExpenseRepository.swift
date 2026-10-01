@@ -49,6 +49,12 @@ final class SupabaseExpenseRepository: ExpenseRepositoring {
             userId = stored.user.id.uuidString.lowercased()
         }
 
+        // Never upload one account's record under another account's identity.
+        // Unowned legacy rows are claimable; a mismatch is a hard failure.
+        if let ownerId = ExpenseOwnership.normalized(expense.ownerId), ownerId != userId {
+            throw AuthError.providerUnavailable("Expense owner mismatch")
+        }
+
         let iso = ISO8601DateFormatter()
         let row = ExpenseUpsertPayload(
             id: expense.id.uuidString,

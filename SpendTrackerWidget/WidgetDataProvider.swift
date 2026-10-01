@@ -100,6 +100,27 @@ enum WidgetDataProvider {
         }
     }
 
+    /// The signed-in account whose data the widget may render. Published by the
+    /// app into the shared App Group defaults on sign-in and cleared on
+    /// sign-out, so a signed-out device (or a different account) never shows
+    /// the previous user's totals on the home screen.
+    static let activeOwnerKey = "activeOwnerId"
+
+    static var activeOwnerId: String? {
+        UserDefaults(suiteName: appGroupID)?.string(forKey: activeOwnerKey)
+    }
+
+    /// Called by the app whenever the session changes. Passing nil clears the
+    /// widget's view of the data.
+    static func publishActiveOwner(_ ownerId: String?) {
+        let defaults = UserDefaults(suiteName: appGroupID)
+        if let owner = ExpenseOwnership.normalized(ownerId) {
+            defaults?.set(owner, forKey: activeOwnerKey)
+        } else {
+            defaults?.removeObject(forKey: activeOwnerKey)
+        }
+    }
+
     /// Legacy Daily wrapper retained for existing callers.
     static func currentSnapshot() -> Snapshot {
         currentSnapshot(for: .daily)
@@ -109,25 +130,37 @@ enum WidgetDataProvider {
         guard let container else {
             return emptySnapshot(for: mode)
         }
-        return snapshot(from: container, mode: mode)
+        return snapshot(from: container, mode: mode, ownerId: activeOwnerId)
     }
 
     /// Legacy Daily wrapper retained for existing callers and tests.
-    static func snapshot(from container: ModelContainer, now: Date = Date()) -> Snapshot {
-        snapshot(from: container, mode: .daily, now: now)
+    static func snapshot(
+        from container: ModelContainer,
+        now: Date = Date(),
+        ownerId: String?
+    ) -> Snapshot {
+        snapshot(from: container, mode: .daily, now: now, ownerId: ownerId)
     }
 
     /// Pure snapshot computation from any container. Exposed so tests can drive
     /// the exact code path the widget uses against a shared-store-backed
     /// container and assert the widget sees app-written expenses.
+    ///
+    /// Only `ownerId`'s expenses are aggregated; a nil owner (signed out)
+    /// renders an empty snapshot rather than another account's spending.
     static func snapshot(
         from container: ModelContainer,
         mode: AnalyticsWidgetMode,
-        now: Date = Date()
+        now: Date = Date(),
+        ownerId: String?
     ) -> Snapshot {
+        guard ExpenseOwnership.normalized(ownerId) != nil else {
+            return emptySnapshot(for: mode)
+        }
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<Expense>()
-        let expenses = (try? context.fetch(descriptor)) ?? []
+        let stored = (try? context.fetch(descriptor)) ?? []
+        let expenses = ExpenseOwnership.visibleExpenses(stored, activeOwnerId: ownerId)
 
         if mode == .trends {
             return trendSnapshot(expenses: expenses, now: now)

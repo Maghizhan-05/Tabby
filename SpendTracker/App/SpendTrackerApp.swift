@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import WidgetKit
 
 @main
 struct SpendTrackerApp: App {
@@ -55,6 +56,14 @@ struct RootView: View {
             QuickEntryLauncher.shared.onRequest = {
                 showQuickEntry = true
             }
+            // Keep the home-screen widget pinned to the signed-in account so it
+            // never renders a previous user's spending.
+            WidgetDataProvider.publishActiveOwner(authViewModel.session?.userId)
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+        .onChange(of: authViewModel.session?.userId) { _, newOwner in
+            WidgetDataProvider.publishActiveOwner(newOwner)
+            WidgetCenter.shared.reloadAllTimelines()
         }
     }
 }
