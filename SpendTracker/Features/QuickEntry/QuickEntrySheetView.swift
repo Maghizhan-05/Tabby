@@ -13,23 +13,32 @@ struct QuickEntrySheetView: View {
         NavigationStack {
             ZStack {
                 TabbyBackdrop()
-                VStack(spacing: 24) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("NEW TAB").font(.caption.weight(.bold)).tracking(1.4).foregroundStyle(Theme.accentBright)
-                            Text("Log a spend").font(.title2.weight(.bold)).foregroundStyle(Theme.ink)
+                ScrollView {
+                    VStack(spacing: 24) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("NEW TAB").font(.caption.weight(.bold)).tracking(1.4).foregroundStyle(Theme.accentBright)
+                                Text("Log a spend").font(.title2.weight(.bold)).foregroundStyle(Theme.ink)
+                            }
+                            Spacer()
+                            TabbyOrbit(size: 34)
                         }
-                        Spacer()
-                        TabbyOrbit(size: 34)
+                        amountField
+                        categoryField
+                        noteField
+                        datePicker
                     }
-                    amountField
-                    categoryField
-                    noteField
-                    datePicker
-                    Spacer()
-                    submitButton
+                    .padding(24)
+                    .padding(.bottom, 12)
                 }
-                .padding(24)
+                .scrollDismissesKeyboard(.interactively)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                submitButton
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+                    .padding(.bottom, 16)
+                    .background(.ultraThinMaterial)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -133,6 +142,7 @@ struct QuickEntrySheetView: View {
             .disabled(!viewModel.canSubmit)
         }
     }
+
 
     private func submit() {
         guard let expense = viewModel.submit(categories: categories, context: modelContext) else { return }
