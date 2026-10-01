@@ -69,7 +69,6 @@ targets:
           - UIInterfaceOrientationPortrait
         SUPABASE_URL: $(SUPABASE_URL)
         SUPABASE_PUBLISHABLE_KEY: $(SUPABASE_PUBLISHABLE_KEY)
-        APPLE_SIGNIN_ENABLED: $(APPLE_SIGNIN_ENABLED)
         GOOGLE_SIGNIN_ENABLED: $(GOOGLE_SIGNIN_ENABLED)
         CFBundleURLTypes:
           - CFBundleURLName: com.maghizhan.spendtracker

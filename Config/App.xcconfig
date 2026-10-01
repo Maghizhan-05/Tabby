@@ -17,8 +17,7 @@
 SUPABASE_URL = $(NEXT_PUBLIC_SUPABASE_URL)
 SUPABASE_PUBLISHABLE_KEY = $(NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)
 
-// OAuth provider toggles. YES enables the Apple/Google buttons in the UI once
+// OAuth provider toggle. YES enables the Google button in the UI once
 // Supabase is configured; the actual OAuth round-trip still requires the
 // provider to be enabled in the Supabase dashboard.
-APPLE_SIGNIN_ENABLED = YES
 GOOGLE_SIGNIN_ENABLED = YES

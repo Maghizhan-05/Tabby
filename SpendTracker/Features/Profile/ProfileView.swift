@@ -13,7 +13,6 @@ struct ProfileView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack { TabbyOrbit(size: 28); Text("Your tab").font(.headline).foregroundStyle(Theme.ink) }
                             Text(auth.session?.email ?? "—").font(.subheadline).foregroundStyle(Theme.subtleInk)
-                            Text(auth.session?.userId ?? "—").font(.caption2.monospaced()).foregroundStyle(Theme.subtleInk.opacity(0.7)).lineLimit(1)
                         }
                         .padding(.vertical, 8)
                     }

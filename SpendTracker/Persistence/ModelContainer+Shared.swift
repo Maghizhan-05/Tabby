@@ -9,6 +9,7 @@ enum SharedModelContainer {
         let schema = Schema([
             Expense.self,
             Category.self,
+            Friend.self,
             UserProfile.self,
         ])
 

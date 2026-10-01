@@ -3,29 +3,45 @@ import SwiftUI
 
 struct AnalyticsEntry: TimelineEntry {
     let date: Date
-    let todayTotal: Double
-    let slices: [WidgetDataProvider.RingSlice]
+    let configuration: AnalyticsModeIntent
+    let snapshot: WidgetDataProvider.Snapshot
 }
 
-struct AnalyticsProvider: TimelineProvider {
+struct AnalyticsProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> AnalyticsEntry {
-        AnalyticsEntry(date: Date(), todayTotal: 42.0, slices: [
-            .init(category: "Food", total: 20),
-            .init(category: "Transport", total: 12),
-            .init(category: "Other", total: 10),
-        ])
+        AnalyticsEntry(
+            date: Date(),
+            configuration: AnalyticsModeIntent(),
+            snapshot: WidgetDataProvider.Snapshot(
+                mode: .daily,
+                title: "Today",
+                total: 42.0,
+                slices: [
+                    .init(category: "Food", total: 20),
+                    .init(category: "Transport", total: 12),
+                    .init(category: "Other", total: 10),
+                ]
+            )
+        )
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (AnalyticsEntry) -> Void) {
-        let snap = WidgetDataProvider.currentSnapshot()
-        completion(AnalyticsEntry(date: Date(), todayTotal: snap.todayTotal, slices: snap.slices))
+    func snapshot(for configuration: AnalyticsModeIntent, in context: Context) async -> AnalyticsEntry {
+        AnalyticsEntry(
+            date: Date(),
+            configuration: configuration,
+            snapshot: WidgetDataProvider.currentSnapshot(for: configuration.mode)
+        )
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<AnalyticsEntry>) -> Void) {
-        let snap = WidgetDataProvider.currentSnapshot()
-        let entry = AnalyticsEntry(date: Date(), todayTotal: snap.todayTotal, slices: snap.slices)
-        let next = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date()
-        completion(Timeline(entries: [entry], policy: .after(next)))
+    func timeline(for configuration: AnalyticsModeIntent, in context: Context) async -> Timeline<AnalyticsEntry> {
+        let now = Date()
+        let entry = AnalyticsEntry(
+            date: now,
+            configuration: configuration,
+            snapshot: WidgetDataProvider.currentSnapshot(for: configuration.mode)
+        )
+        let next = Calendar.current.date(byAdding: .minute, value: 30, to: now) ?? now
+        return Timeline(entries: [entry], policy: .after(next))
     }
 }
 
@@ -42,20 +58,52 @@ struct AnalyticsRingsWidgetView: View {
     var entry: AnalyticsEntry
     @Environment(\.widgetFamily) private var family
 
-    private var total: Double { max(entry.slices.reduce(0) { $0 + $1.total }, 0.0001) }
+    private var snapshot: WidgetDataProvider.Snapshot { entry.snapshot }
+    private var total: Double { max(snapshot.slices.reduce(0) { $0 + $1.total }, 0.0001) }
+    private var hasRingData: Bool { !snapshot.slices.isEmpty }
+    private var hasTrendData: Bool { snapshot.trendTotals.contains { $0.total > 0 } }
 
     var body: some View {
+        Group {
+            if snapshot.mode == .trends {
+                trends
+            } else {
+                rings
+            }
+        }
+        .widgetURL(URL(string: "spendtracker://quick-entry"))
+    }
+
+    @ViewBuilder
+    private var rings: some View {
         switch family {
         case .systemSmall:
-            small
+            if hasRingData {
+                ring.padding(12)
+            } else {
+                emptyState.padding(12)
+            }
         default:
-            medium
+            ringMedium
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 4) {
+            Text(snapshot.title)
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.58))
+            Text("No spending yet")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.82))
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.7)
         }
     }
 
     private var ring: some View {
         ZStack {
-            ForEach(Array(entry.slices.enumerated()), id: \.element.id) { index, slice in
+            ForEach(Array(snapshot.slices.enumerated()), id: \.element.id) { index, slice in
                 let start = startFraction(upTo: index)
                 let end = start + slice.total / total
                 Circle()
@@ -65,8 +113,8 @@ struct AnalyticsRingsWidgetView: View {
                     .rotationEffect(.degrees(-90))
             }
             VStack(spacing: 0) {
-                Text("Today").font(.caption2).foregroundStyle(.white.opacity(0.58))
-                Text(currency(entry.todayTotal))
+                Text(snapshot.title).font(.caption2).foregroundStyle(.white.opacity(0.58))
+                Text(currency(snapshot.total))
                     .font(.headline.weight(.bold))
                     .monospacedDigit()
                     .foregroundStyle(.white)
@@ -77,15 +125,18 @@ struct AnalyticsRingsWidgetView: View {
         }
     }
 
-    private var small: some View {
-        ring.padding(12).widgetURL(URL(string: "spendtracker://quick-entry"))
-    }
-
-    private var medium: some View {
+    private var ringMedium: some View {
         HStack(spacing: 16) {
-            ring.frame(width: 90, height: 90)
+            Group {
+                if hasRingData {
+                    ring
+                } else {
+                    emptyState
+                }
+            }
+            .frame(width: 90, height: 90)
             VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(entry.slices.prefix(4).enumerated()), id: \.element.id) { index, slice in
+                ForEach(Array(snapshot.slices.prefix(4).enumerated()), id: \.element.id) { index, slice in
                     HStack(spacing: 6) {
                         Circle().fill(ringPalette[index % ringPalette.count]).frame(width: 7, height: 7)
                         Text(slice.category).font(.caption2).foregroundStyle(.white.opacity(0.78))
@@ -93,17 +144,116 @@ struct AnalyticsRingsWidgetView: View {
                         Text(currency(slice.total)).font(.caption2.weight(.medium).monospacedDigit()).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.7)
                     }
                 }
-                if entry.slices.isEmpty {
-                    Text("No spending today").font(.caption2).foregroundStyle(.secondary)
+                if snapshot.slices.isEmpty {
+                    Text("No spending for this period").font(.caption2).foregroundStyle(.secondary)
                 }
             }
         }
         .padding(14)
-        .widgetURL(URL(string: "spendtracker://quick-entry"))
+    }
+
+    @ViewBuilder
+    private var trends: some View {
+        switch family {
+        case .systemSmall:
+            trendSmall
+        default:
+            trendMedium
+        }
+    }
+
+    private var trendSmall: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(snapshot.title)
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.58))
+            if hasTrendData {
+                Text(currency(snapshot.total))
+                    .font(.title3.weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+                Spacer(minLength: 0)
+                trendDelta
+            } else {
+                Text("No spending yet")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.82))
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(14)
+    }
+
+    private var trendMedium: some View {
+        HStack(alignment: .bottom, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(snapshot.title)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.58))
+                if hasTrendData {
+                    Text(currency(snapshot.total))
+                        .font(.title3.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                    trendDelta
+                } else {
+                    Text("No spending yet")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.82))
+                }
+            }
+            if hasTrendData {
+                weeklyBars
+                    .frame(maxWidth: .infinity, minHeight: 72, maxHeight: 72)
+            }
+        }
+        .padding(14)
+    }
+
+    @ViewBuilder
+    private var trendDelta: some View {
+        // Zero change is neutral — never painted as an increase.
+        let delta = snapshot.trendDelta
+        let arrow = delta == 0 ? "→" : (delta > 0 ? "↑" : "↓")
+        let tint: Color = delta == 0
+            ? .white.opacity(0.62)
+            : (delta > 0 ? Color(red: 0.35, green: 0.88, blue: 0.61) : Color(red: 1.0, green: 0.52, blue: 0.48))
+        let label = delta == 0
+            ? "→ No change vs last week"
+            : "\(arrow) \(currency(abs(delta))) vs last week"
+        Text(label)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+    }
+
+    private var weeklyBars: some View {
+        GeometryReader { geometry in
+            let maximum = max(snapshot.trendTotals.map(\.total).max() ?? 0, 0.0001)
+            HStack(alignment: .bottom, spacing: 5) {
+                ForEach(snapshot.trendTotals) { point in
+                    VStack(spacing: 3) {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(ringPalette[0])
+                            .frame(height: max(4, geometry.size.height - 18) * point.total / maximum)
+                        Text(point.label)
+                            .font(.system(size: 7))
+                            .foregroundStyle(.white.opacity(0.58))
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                }
+            }
+        }
     }
 
     private func startFraction(upTo index: Int) -> Double {
-        entry.slices.prefix(index).reduce(0) { $0 + $1.total } / total
+        snapshot.slices.prefix(index).reduce(0) { $0 + $1.total } / total
     }
 
     private func currency(_ value: Double) -> String {
@@ -115,16 +265,12 @@ struct AnalyticsRingsWidget: Widget {
     let kind = "AnalyticsRingsWidget"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: AnalyticsProvider()) { entry in
-            if #available(iOS 17.0, *) {
-                AnalyticsRingsWidgetView(entry: entry)
-                    .containerBackground(Color(red: 0.035, green: 0.039, blue: 0.055), for: .widget)
-            } else {
-                AnalyticsRingsWidgetView(entry: entry)
-            }
+        AppIntentConfiguration(kind: kind, intent: AnalyticsModeIntent.self, provider: AnalyticsProvider()) { entry in
+            AnalyticsRingsWidgetView(entry: entry)
+                .containerBackground(Color(red: 0.035, green: 0.039, blue: 0.055), for: .widget)
         }
-        .configurationDisplayName("Spending Rings")
-        .description("Today's spending by category.")
+        .configurationDisplayName("Spending Analytics")
+        .description("Choose a spending view for this widget.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }

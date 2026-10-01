@@ -31,13 +31,11 @@ enum AuthError: LocalizedError {
 /// depends only on this protocol so it compiles even if the SDK is absent.
 protocol AuthServicing {
     var isSupabaseConfigured: Bool { get }
-    var isAppleProviderConfigured: Bool { get }
     var isGoogleProviderConfigured: Bool { get }
 
     func currentSession() async -> AuthSession?
     func signInEmail(email: String, password: String) async throws -> AuthSession
     func signUpEmail(email: String, password: String) async throws -> AuthSession
-    func signInWithApple() async throws -> AuthSession
     func signInWithGoogle() async throws -> AuthSession
     func completeOAuth(from url: URL) async throws -> AuthSession
     func signOut() async throws
@@ -50,9 +48,6 @@ final class SupabaseAuthService: AuthServicing {
     // Provider configuration flags. In a real deployment these would be driven
     // by Info.plist / remote config; here Supabase presence gates them.
     var isSupabaseConfigured: Bool { provider.isConfigured }
-    var isAppleProviderConfigured: Bool {
-        provider.isConfigured && Self.infoFlag("APPLE_SIGNIN_ENABLED")
-    }
     var isGoogleProviderConfigured: Bool {
         provider.isConfigured && Self.infoFlag("GOOGLE_SIGNIN_ENABLED")
     }
@@ -104,14 +99,9 @@ final class SupabaseAuthService: AuthServicing {
         #endif
     }
 
-    func signInWithApple() async throws -> AuthSession {
-        guard isAppleProviderConfigured else { throw AuthError.providerUnavailable("Apple") }
-        return try await signInWithOAuth(provider: "apple")
-    }
-
     func signInWithGoogle() async throws -> AuthSession {
         guard isGoogleProviderConfigured else { throw AuthError.providerUnavailable("Google") }
-        return try await signInWithOAuth(provider: "google")
+        return try await signInWithOAuth()
     }
 
     /// Custom URL scheme redirect the app declares in Info.plist (spendtracker://).
@@ -121,14 +111,13 @@ final class SupabaseAuthService: AuthServicing {
     /// `spendtracker://auth-callback` redirect. The SDK completes the PKCE round-trip
     /// and returns a Session; a callback opened by the system is also handled in
     /// SpendTrackerApp's `.onOpenURL` via `client.auth.session(from:)`.
-    private func signInWithOAuth(provider providerName: String) async throws -> AuthSession {
+    private func signInWithOAuth() async throws -> AuthSession {
         #if canImport(Supabase)
         guard let client = self.provider.client else { throw AuthError.notConfigured }
         guard let redirect = Self.oauthCallbackURL else { throw AuthError.notConfigured }
-        let oauthProvider: Provider = providerName == "apple" ? .apple : .google
         do {
             let session = try await client.auth.signInWithOAuth(
-                provider: oauthProvider,
+                provider: .google,
                 redirectTo: redirect
             )
             return AuthSession(userId: session.user.id.uuidString, email: session.user.email)
@@ -136,7 +125,7 @@ final class SupabaseAuthService: AuthServicing {
             throw AuthError.underlying(error.localizedDescription)
         }
         #else
-        throw AuthError.providerUnavailable(providerName == "apple" ? "Apple" : "Google")
+        throw AuthError.providerUnavailable("Google")
         #endif
     }
 

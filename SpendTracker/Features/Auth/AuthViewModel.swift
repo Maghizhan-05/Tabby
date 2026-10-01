@@ -22,7 +22,6 @@ final class AuthViewModel: ObservableObject {
     private let authService: AuthServicing
 
     var isSupabaseConfigured: Bool { authService.isSupabaseConfigured }
-    var isAppleConfigured: Bool { authService.isAppleProviderConfigured }
     var isGoogleConfigured: Bool { authService.isGoogleProviderConfigured }
 
     // MARK: - Form validation
@@ -112,13 +111,6 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
-    func signInWithApple() async {
-        await run {
-            let session = try await self.authService.signInWithApple()
-            self.session = session
-            self.isAuthenticated = true
-        }
-    }
 
     func signInWithGoogle() async {
         await run {

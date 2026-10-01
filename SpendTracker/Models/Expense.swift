@@ -6,6 +6,7 @@ enum SyncState: Int, Codable {
     case local = 0      // Created locally, never pushed
     case synced = 1     // Pushed and confirmed by backend
     case dirty = 2      // Modified locally after a prior sync
+    case deleted = 3    // Removed locally; pending remote deletion
 }
 
 @Model

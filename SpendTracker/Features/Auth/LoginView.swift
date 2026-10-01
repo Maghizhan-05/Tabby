@@ -151,7 +151,6 @@ struct LoginView: View {
 
     private var providerButtons: some View {
         VStack(spacing: 10) {
-            providerButton(title: "Continue with Apple", systemImage: "apple.logo", enabled: auth.isAppleConfigured, disabledText: "Apple sign-in not configured") { Task { await auth.signInWithApple() } }
             providerButton(title: "Continue with Google", systemImage: "g.circle", enabled: auth.isGoogleConfigured, disabledText: "Google sign-in not configured") { Task { await auth.signInWithGoogle() } }
         }
     }

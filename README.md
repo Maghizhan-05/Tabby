@@ -19,7 +19,7 @@ Live Activity / Dynamic Island confirmation, plus an App Intent bindable to **Ba
   into quick entry.
 - **Live Activity**: animated confirmation ring on submit (Dynamic Island expanded/compact/minimal);
   degrades gracefully where unavailable.
-- **Auth**: email/password plus Sign in with Apple / Google. Unconfigured providers render
+- **Auth**: email/password plus Google sign-in. Unconfigured providers render
   **disabled** (not hidden) with helper text; missing Supabase keys show a non-blocking banner.
 
 ## Requirements
@@ -99,7 +99,7 @@ alter table public.expenses add column if not exists note text;
 Local notes work without this migration. Cloud upserts containing a non-empty note require
 the new column; note-less rows remain compatible with the pre-migration schema.
 
-### Configuring Apple + Google OAuth providers
+### Configuring Google OAuth
 
 The app uses the Supabase OAuth **web flow** (`ASWebAuthenticationSession`) with a custom
 URL scheme redirect. The app declares the `spendtracker` URL scheme in `Info.plist` and
@@ -109,18 +109,12 @@ uses **`spendtracker://auth-callback`** as the OAuth redirect. `SpendTrackerApp`
 In the Supabase dashboard → **Authentication → URL Configuration**, add
 `spendtracker://auth-callback` to the **Redirect URLs** allow-list.
 
-Then in **Authentication → Providers**:
-
-- **Apple**: enable Apple. Create a **Services ID** in the Apple Developer portal, configure
-  Sign in with Apple, and add Supabase's callback
-  `https://<project-ref>.supabase.co/auth/v1/callback` as a Return URL. Paste the Services ID,
-  Team ID, Key ID, and the .p8 private key into Supabase.
-- **Google**: enable Google. In Google Cloud Console create an OAuth 2.0 Client ID, add the same
+Then in **Authentication → Providers**, enable **Google**. In Google Cloud Console create an OAuth 2.0 Client ID, add the same
   `https://<project-ref>.supabase.co/auth/v1/callback` as an Authorized redirect URI, and paste the
   Client ID + secret into Supabase.
 
-The Apple/Google buttons are enabled when Supabase is configured and
-`APPLE_SIGNIN_ENABLED` / `GOOGLE_SIGNIN_ENABLED` (Info.plist bools, via xcconfig) are `YES`.
+The Google button is enabled when Supabase is configured and
+`GOOGLE_SIGNIN_ENABLED` (an Info.plist bool, via xcconfig) is `YES`.
 Configured taps genuinely start the OAuth flow; if a provider isn't enabled server-side the
 Supabase error is surfaced to the user.
 
@@ -147,13 +141,13 @@ On device: **Settings → Accessibility → Touch → Back Tap → Double Tap �
   **confirmation-only**; the actual entry form is the in-app bottom sheet.
 - **Back Tap binding is only verifiable on real hardware** (not in the simulator).
 - **Supabase live-project keys enable auth and sync.** Without them the app runs fully offline
-  with cloud paths disabled; with them, email/password + Apple/Google OAuth and background sync
+  with cloud paths disabled; with them, email/password + Google OAuth and background sync
   are active.
 - **Cloud sync is implemented.** `SyncEngine` pushes unsynced/dirty expenses and categories via
   the Supabase-backed repositories (`.from("expenses")` / `.from("categories")` upsert-by-UUID,
   delete-by-id), scoped to `auth.uid()` via RLS. Records are marked `.synced` only after a
   successful backend write; both `Expense` and `Category` carry a per-record sync flag so nothing
   is re-pushed every run.
-- **Apple/Google OAuth is implemented** via `client.auth.signInWithOAuth` using the
+- **Google OAuth is implemented** via `client.auth.signInWithOAuth` using the
   `spendtracker://auth-callback` redirect; configured taps start the real flow.
 - Built and tested against **Xcode 27 / iOS 27 SDK targeting the iPhone 18 Pro simulator**.

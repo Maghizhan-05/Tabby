@@ -39,7 +39,13 @@ struct RootView: View {
     var body: some View {
         Group {
             if authViewModel.isAuthenticated {
-                HomeView(showQuickEntry: $showQuickEntry)
+                TabView {
+                    HomeView(showQuickEntry: $showQuickEntry)
+                        .tabItem { Label("Home", systemImage: "house.fill") }
+                    FriendsView()
+                        .tabItem { Label("Friends", systemImage: "person.2.fill") }
+                }
+                .tint(Theme.accentBright)
             } else {
                 LoginView()
             }
