@@ -3,6 +3,7 @@ import SwiftData
 
 struct FriendsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var auth: AuthViewModel
     @Query(sort: \Friend.name) private var friends: [Friend]
     @StateObject private var viewModel = FriendsViewModel()
@@ -64,7 +65,14 @@ struct FriendsView: View {
                 }
             }
         }
+        // Lifecycle sync: push local work, then pull rows created/edited/deleted
+        // on another device. Covers "after login" (fresh mount), "on
+        // foreground", and account switches — mirroring Recent Activity.
         .task { await syncFriends() }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await syncFriends() }
+        }
         .onChange(of: ownerId) { _, _ in
             viewModel.isPresentingEditor = false
             viewModel.editingFriend = nil
@@ -91,7 +99,7 @@ struct FriendsView: View {
             categoryRepository: SupabaseCategoryRepository(),
             friendRepository: SupabaseFriendRepository()
         )
-        await engine.pushUnsyncedFriends(ownerId: ownerId)
+        await engine.syncFriends(ownerId: ownerId)
     }
 }
 

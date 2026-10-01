@@ -91,4 +91,5 @@ private struct FailingFriendRepository: FriendRepositoring {
     struct Failure: Error {}
     func upsert(_ friend: Friend) async throws { throw Failure() }
     func delete(id: UUID) async throws {}
+    func fetchAll(ownerId: String) async throws -> [RemoteFriendRow] { [] }
 }

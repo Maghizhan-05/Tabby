@@ -18,9 +18,16 @@ final class FriendsViewModel: ObservableObject {
 
     /// Rows the signed-in user may see. Records owned by another account are
     /// never surfaced, and nothing is shown while signed out.
+    /// Owner comparison is normalized (case/whitespace-insensitive): a locally
+    /// created row is stamped with the session's uppercase uuid string, while a
+    /// row pulled from Supabase carries Postgres's canonical lowercase form.
+    /// A raw `==` here would hide every pulled friend.
     static func visibleFriends(_ friends: [Friend], ownerId: String?) -> [Friend] {
-        guard let ownerId, !ownerId.isEmpty else { return [] }
-        return friends.filter { $0.syncState != .deleted && $0.ownerId == ownerId }
+        guard ExpenseOwnership.normalized(ownerId) != nil else { return [] }
+        return friends.filter {
+            $0.syncState != .deleted
+                && ExpenseOwnership.isAccessible(recordOwnerId: $0.ownerId, activeOwnerId: ownerId)
+        }
     }
 
     static func aggregateNet(of friends: [Friend]) -> Decimal {
@@ -65,7 +72,9 @@ final class FriendsViewModel: ObservableObject {
         }
 
         if let friend = editingFriend {
-            guard friend.ownerId == ownerId else {
+            guard ExpenseOwnership.isAccessible(
+                recordOwnerId: friend.ownerId, activeOwnerId: ownerId
+            ) else {
                 notice = "This record belongs to another account."
                 return false
             }
@@ -97,7 +106,9 @@ final class FriendsViewModel: ObservableObject {
     /// delete succeeds, so offline deletion is retried rather than lost.
     @discardableResult
     func delete(_ friend: Friend, context: ModelContext, ownerId: String?) -> Bool {
-        guard let ownerId, friend.ownerId == ownerId else { return false }
+        guard ExpenseOwnership.isAccessible(
+            recordOwnerId: friend.ownerId, activeOwnerId: ownerId
+        ) else { return false }
         friend.syncState = .deleted
         friend.updatedAt = Date()
         do {

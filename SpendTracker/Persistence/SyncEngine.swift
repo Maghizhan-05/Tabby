@@ -125,15 +125,26 @@ final class SyncEngine {
             predicate: #Predicate<Friend> { $0.syncStateRaw != 1 }
         )
         guard let fetched = try? modelContext.fetch(descriptor) else { return }
-        let friends = fetched.filter { $0.ownerId == ownerId }
+        // Normalized comparison: locally-created rows carry the session's
+        // uppercase uuid string, pulled rows Postgres's lowercase form.
+        let friends = fetched.filter {
+            ExpenseOwnership.isAccessible(recordOwnerId: $0.ownerId, activeOwnerId: ownerId)
+        }
         guard !friends.isEmpty else { return }
 
         for friend in friends {
+            // Never re-stamp another account's record.
+            guard let owner = ExpenseOwnership.resolvedOwnerId(
+                recordOwnerId: friend.ownerId,
+                activeOwnerId: ownerId
+            ) else { continue }
+
             do {
                 if friend.syncState == .deleted {
                     try await friendRepository.delete(id: friend.id)
                     modelContext.delete(friend)
                 } else {
+                    friend.ownerId = owner
                     try await friendRepository.upsert(friend)
                     friend.syncState = .synced
                     friend.updatedAt = Date()
@@ -151,6 +162,87 @@ final class SyncEngine {
         await pushUnsyncedCategories()
         await pushUnsyncedExpenses(ownerId: ownerId)
         await pushUnsyncedFriends(ownerId: ownerId)
+    }
+
+    // MARK: - Bidirectional friend sync
+
+    /// Apply the remote friend snapshot to the local store.
+    ///
+    /// Same safety properties as `pullExpenses`: a failed or partial fetch
+    /// returns false WITHOUT applying anything, so an error can never be read
+    /// as "everything was deleted".
+    @discardableResult
+    func pullFriends(ownerId: String?) async -> Bool {
+        guard let activeOwner = ExpenseOwnership.normalized(ownerId) else { return false }
+
+        let remote: [RemoteFriendRow]
+        do {
+            remote = try await friendRepository.fetchAll(ownerId: activeOwner)
+        } catch {
+            return false
+        }
+
+        guard let localFriends = try? modelContext.fetch(FetchDescriptor<Friend>()) else {
+            return false
+        }
+
+        let plan = FriendReconciliation.plan(
+            local: localFriends.map {
+                FriendReconciliation.LocalRecord(
+                    id: $0.id,
+                    ownerId: $0.ownerId,
+                    updatedAt: $0.updatedAt,
+                    syncState: $0.syncState
+                )
+            },
+            remote: remote,
+            activeOwnerId: activeOwner
+        )
+        guard !plan.isEmpty else { return false }
+
+        var byID: [UUID: Friend] = [:]
+        for friend in localFriends { byID[friend.id] = friend }
+
+        for row in plan.inserts {
+            modelContext.insert(
+                Friend(
+                    id: row.id,
+                    name: row.name,
+                    ownerId: activeOwner,
+                    theyOweUs: row.theyOweUs,
+                    weOweThem: row.weOweThem,
+                    createdAt: row.createdAt,
+                    updatedAt: row.updatedAt,
+                    syncState: .synced
+                )
+            )
+        }
+
+        for update in plan.updates {
+            guard let friend = byID[update.id] else { continue }
+            friend.name = update.row.name
+            friend.theyOweUs = update.row.theyOweUs
+            friend.weOweThem = update.row.weOweThem
+            friend.updatedAt = update.row.updatedAt
+            friend.ownerId = activeOwner
+            friend.syncState = .synced
+        }
+
+        for id in plan.deletions {
+            guard let friend = byID[id] else { continue }
+            modelContext.delete(friend)
+        }
+
+        try? modelContext.save()
+        return true
+    }
+
+    /// Push local friend work, then reconcile against a complete remote
+    /// snapshot. Push-before-pull is load-bearing for absence-based deletion.
+    @discardableResult
+    func syncFriends(ownerId: String?) async -> Bool {
+        await pushUnsyncedFriends(ownerId: ownerId)
+        return await pullFriends(ownerId: ownerId)
     }
 
     // MARK: - Bidirectional expense sync
