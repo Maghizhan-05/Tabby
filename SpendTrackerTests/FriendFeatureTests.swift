@@ -47,7 +47,8 @@ final class FriendFeatureTests: XCTestCase {
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [config])
         let context = ModelContext(container)
-        let friend = Friend(name: "Maya", theyOweUs: 10, weOweThem: 0)
+        let ownerId = "owner-id"
+        let friend = Friend(name: "Maya", ownerId: ownerId, theyOweUs: 10, weOweThem: 0)
         context.insert(friend)
         try context.save()
 
@@ -57,7 +58,7 @@ final class FriendFeatureTests: XCTestCase {
             categoryRepository: NoOpCategoryRepository(),
             friendRepository: FailingFriendRepository()
         )
-        await engine.pushUnsyncedFriends()
+        await engine.pushUnsyncedFriends(ownerId: ownerId)
 
         let stored = try XCTUnwrap(context.fetch(FetchDescriptor<Friend>()).first)
         XCTAssertEqual(stored.syncState, .local)
