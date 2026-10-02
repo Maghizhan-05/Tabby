@@ -144,13 +144,13 @@
     border-top: 1px solid rgba(255 255 255 / .06); }
   #lockBtn { height: 56px; border-radius: 16px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; font-size: 17px; font-weight: 700; color: var(--paper);
     background: var(--accent); transform-origin: center; }
-  #keyboard { position: absolute; left: 0; width: 402px; height: 300px; background: rgba(38 38 42 / .97); border-radius: 26px 26px 0 0;
+  .kb { position: absolute; left: 0; width: 402px; height: 300px; background: rgba(38 38 42 / .97); border-radius: 26px 26px 0 0;
     border-top: 1px solid rgba(255 255 255 / .08); padding: 10px 6px 0; }
-  #keyboard .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px 6px; }
-  #keyboard .k { height: 47px; border-radius: 10px; background: rgb(98 98 102); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; }
-  #keyboard .k b { font-size: 25px; font-weight: 400; line-height: 26px; }
-  #keyboard .k small { font-size: 9.5px; font-weight: 700; letter-spacing: 2px; margin-top: -1px; }
-  #keyboard .k.clear { background: transparent; }
+  .kb .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px 6px; }
+  .kb .k { height: 47px; border-radius: 10px; background: rgb(98 98 102); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; }
+  .kb .k b { font-size: 25px; font-weight: 400; line-height: 26px; }
+  .kb .k small { font-size: 9.5px; font-weight: 700; letter-spacing: 2px; margin-top: -1px; }
+  .kb .k.clear { background: transparent; }
 
   #picker { position: absolute; left: 0; top: 0; width: 402px; height: 874px; border-radius: 38px 38px 0 0; overflow: hidden;
     box-shadow: 0 -1px 0 rgba(255 255 255 / .10), 0 -10px 40px rgba(0 0 0 / .55); }
@@ -163,6 +163,56 @@
   #picker .prow .cdot::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
   #picker .prow .sep { position: absolute; left: 60px; right: 0; bottom: 0; height: 1px; background: var(--hairline); }
   #picker .prow .hl { position: absolute; inset: 0; background: rgba(255 255 255 / .08); opacity: 0; }
+
+  /* Friends (FriendsView + FriendEditSheetView) */
+  #friendsTab { position: absolute; inset: 0; display: none; }
+  .glassCircle { position: absolute; width: 44px; height: 44px; border-radius: 22px; display: grid; place-items: center; color: var(--accent);
+    background: rgba(255 255 255 / .08); border: 1px solid rgba(255 255 255 / .08); }
+  .ftitle { position: absolute; left: 20px; top: 104px; font-size: 34px; font-weight: 700; letter-spacing: -.6px; }
+  .fhead { position: absolute; left: 36px; width: 330px; top: 172px; display: flex; gap: 8px; font-size: 11px; font-weight: 700; color: var(--subtle); letter-spacing: .2px; }
+  .fhead span:first-child, .frow .n { flex: 1; }
+  .fhead span + span, .frow .c { width: 70px; text-align: right; }
+  .fgroup { position: absolute; left: 16px; width: 370px; border-radius: 22px; background: rgba(19 20 27 / .86); overflow: hidden; }
+  .frow { position: absolute; left: 0; width: 370px; height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 20px; }
+  .frow .n { font-size: 15px; font-weight: 600; position: relative; }
+  .frow .c { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; position: relative; }
+  .frow .sep, .fcell .sep { position: absolute; left: 20px; right: 0; bottom: 0; height: 1px; background: var(--hairline); }
+  .frow .hl { position: absolute; inset: 0; background: rgba(255 255 255 / .09); opacity: 0; }
+  .ffoot { position: absolute; left: 36px; width: 330px; top: 410px; display: flex; justify-content: space-between; font-size: 15px; color: var(--subtle); }
+  .ffoot b { font-weight: 700; font-variant-numeric: tabular-nums; }
+  #fsheet { position: absolute; left: 0; top: 0; width: 402px; height: 874px; border-radius: 38px 38px 0 0; overflow: hidden; display: none;
+    box-shadow: 0 -1px 0 rgba(255 255 255 / .10), 0 -10px 40px rgba(0 0 0 / .5); }
+  .navTitle { position: absolute; left: 0; width: 402px; top: 22px; text-align: center; font-size: 17px; font-weight: 600; }
+  .fsec { position: absolute; left: 36px; font-size: 13px; color: var(--subtle); letter-spacing: .3px; }
+  .fcell { position: absolute; left: 0; width: 370px; height: 52px; padding: 0 20px; display: flex; align-items: center; font-size: 17px; }
+  #oweCaret { width: 2px; height: 22px; border-radius: 1px; background: var(--accent); margin-left: 1px; }
+
+  /* Home Screen (springboard) + the Spending Analytics widget */
+  #springboard { position: absolute; inset: 0; display: none; overflow: hidden; transform-origin: 201px 437px;
+    background: radial-gradient(90% 55% at 78% 18%, rgba(230 168 56 / .30), transparent 60%),
+                radial-gradient(80% 50% at 10% 85%, rgba(171 115 245 / .16), transparent 60%),
+                linear-gradient(170deg, #15161d, #090a0e 55%, #0c0d13); }
+  #springboard::after { content: ""; position: absolute; left: 150px; top: -120px; width: 560px; height: 560px; border-radius: 50%;
+    border: 1.5px solid rgba(255 214 110 / .10); }
+  .widget { position: absolute; left: 27px; top: 70px; width: 348px; height: 163px; border-radius: 26px; background: #090a0e;
+    box-shadow: 0 0 0 1px rgba(255 255 255 / .07), 0 10px 30px rgba(0 0 0 / .45); display: flex; align-items: center; gap: 16px; padding: 14px 18px; }
+  .widget .ringBox { position: relative; width: 90px; height: 90px; flex: none; margin-left: 8px; }
+  .widget .ringBox .ctr { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .widget .ctr .t { font-size: 11px; color: rgba(255 255 255 / .58); }
+  .widget .ctr .v { font-size: 17px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+  .widget .leg { flex: 1; display: flex; flex-direction: column; gap: 4px; padding-right: 6px; }
+  .widget .leg div { display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(255 255 255 / .78); }
+  .widget .leg i { width: 7px; height: 7px; border-radius: 50%; display: block; }
+  .widget .leg b { margin-left: auto; font-weight: 500; color: #fff; font-variant-numeric: tabular-nums; }
+  .sbLabel { position: absolute; font-size: 12px; font-weight: 500; color: rgba(255 255 255 / .92); text-align: center; text-shadow: 0 1px 2px rgba(0 0 0 / .5); }
+  .appIcon { position: absolute; width: 64px; height: 64px; border-radius: 15px; overflow: hidden; display: grid; place-items: center;
+    background: linear-gradient(160deg, rgba(255 255 255 / .14), rgba(255 255 255 / .05)); box-shadow: inset 0 0 0 1px rgba(255 255 255 / .12); color: rgba(240 237 227 / .86); }
+  .appIcon img { width: 100%; height: 100%; display: block; }
+  #sbSearch { position: absolute; left: 160px; top: 742px; width: 82px; height: 28px; border-radius: 14px; background: rgba(255 255 255 / .12);
+    display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 12px; font-weight: 500; color: rgba(255 255 255 / .85); }
+  #sbDock { position: absolute; left: 12px; top: 780px; width: 378px; height: 86px; border-radius: 34px; background: rgba(255 255 255 / .10);
+    box-shadow: inset 0 0 0 1px rgba(255 255 255 / .08); }
+  #app { position: absolute; inset: 0; }
 
   /* Film treatment (screen-space, above the UI) */
   #fx { position: absolute; left: 0; top: 0; width: 402px; height: 874px; overflow: visible; pointer-events: none; }
@@ -201,6 +251,10 @@
   <div id="cam">
     <div id="device"></div>
     <div id="screen">
+      <!-- iPhone HOME SCREEN with the Tabby widget (story cut bookend) -->
+      <div id="springboard"></div>
+
+      <div id="app">
       <!-- HOME (HomeView inside the TabView) -->
       <div id="home">
         <div class="backdrop" id="homeBackdrop"></div>
@@ -227,9 +281,17 @@
         <div id="rows"></div>
         <div id="edgeFade"></div>
         <div id="addSpend"><span data-icon="plus"></span>Add spend</div>
+        <div id="friendsTab">
+          <div class="backdrop" style="--gx:60px"></div>
+          <div class="glassCircle" style="right:16px;top:56px"><span data-icon="plus"></span></div>
+          <div class="ftitle">Friends</div>
+          <div class="fhead"><span>FRIEND</span><span>THEY OWE</span><span>YOU OWE</span><span>NET</span></div>
+          <div class="fgroup" id="fList" style="top:192px;height:208px"></div>
+          <div class="ffoot"><span>Aggregate net</span><b id="aggNet"></b></div>
+        </div>
         <div id="tabbar">
-          <div class="tab on"><span data-icon="house"></span>Home</div>
-          <div class="tab"><span data-icon="people"></span>Friends</div>
+          <div class="tab on" id="tabHome"><span data-icon="house"></span>Home</div>
+          <div class="tab" id="tabFriends"><span data-icon="people"></span>Friends</div>
         </div>
       </div>
       <div class="dim" id="dim1"></div>
@@ -254,8 +316,24 @@
         <div id="noteCount" class="num">0/120</div>
         <div class="control" id="dateField"><span style="flex:1">When</span><span class="chip">22 Oct 2026</span><span class="chip">1:42 pm</span></div>
         <div id="submitBar"><div id="lockBtn"><span>Lock it in</span><span data-icon="arrowUR"></span></div></div>
-        <div id="keyboard"><div class="grid" id="keys"></div></div>
+        <div id="keyboard" class="kb"><div class="grid" id="keys"></div></div>
         <div class="dim" id="dim2"></div>
+      </div>
+
+      <!-- EDIT FRIEND SHEET (FriendEditSheetView) -->
+      <div id="fsheet">
+        <div class="backdrop" style="--gx:-60px"></div>
+        <div class="glassBtn" style="left:16px;top:12px">Cancel</div>
+        <div class="navTitle">Edit Friend</div>
+        <div class="glassBtn" id="saveBtn" style="right:16px;top:12px;color:var(--accent-bright);font-weight:600">Save</div>
+        <div class="fsec" style="top:80px">FRIEND</div>
+        <div class="fgroup" style="top:98px;height:52px"><div class="fcell">Arjun</div></div>
+        <div class="fsec" style="top:180px">BALANCES</div>
+        <div class="fgroup" style="top:198px;height:104px">
+          <div class="fcell" style="top:0"><span id="oweTxt" class="num">650</span><i id="oweCaret"></i><i class="sep"></i></div>
+          <div class="fcell num" style="top:52px">0</div>
+        </div>
+        <div id="keyboard2" class="kb"><div class="grid" id="keys2"></div></div>
       </div>
 
       <!-- CATEGORY PICKER (medium detent) -->
@@ -266,6 +344,8 @@
         <div class="search"><span data-icon="search"></span>Search or add category</div>
         <div id="prows"></div>
       </div>
+
+      </div><!-- /#app -->
 
       <div id="status">
         <div class="time">1:42</div>
@@ -288,6 +368,8 @@
   <div class="head" id="h2" style="top:268px"><span class="ln"><span class="w">Log</span> <span class="w">it<span class="dotp">.</span></span></span></div>
   <div class="head" id="h3" style="top:268px"><span class="ln"><span class="w">See</span> <span class="w">it<span class="dotp">.</span></span></span></div>
   <div class="head" id="h4" style="top:232px"><span class="ln"><span class="w">Know</span> <span class="w">your</span></span><span class="ln"><span class="w">spending<span class="dotp">.</span></span></span></div>
+  <div class="head" id="h6" style="top:268px"><span class="ln"><span class="w">At</span> <span class="w">a</span> <span class="w">glance<span class="dotp">.</span></span></span></div>
+  <div class="head" id="h5" style="top:268px"><span class="ln"><span class="w">Settle</span> <span class="w">up<span class="dotp">.</span></span></span></div>
   <svg id="hookSvg" viewBox="0 0 1080 1920"></svg>
 
   <div id="close">
@@ -299,23 +381,19 @@
   </div>
   <div id="vignette"></div>
 </div>
-<div id="ui"><button id="play">Pause</button><input id="scrub" type="range" min="0" max="15" step="0.001" value="0"><span id="tc">0.00</span></div>
+<div id="ui"><button id="play">Pause</button><input id="scrub" type="range" min="0" max="30" step="0.001" value="0"><span id="tc">0.00</span></div>
 
+<script src="cuts.js"></script>
 <script>
 'use strict';
-/* ───────────────────────── Timeline (seconds) ───────────────────────── */
-const DURATION = 15;
-const T = {
-  tapAdd: 1.55, sheetIn: [1.66, 2.12], kbIn: [1.86, 2.24], cutType: 2.2,
-  keys: [[2.42, '1'], [2.70, '8'], [2.98, '0']],
-  tapCat: 3.24, pickerIn: [3.30, 3.66], kbOut: [3.30, 3.56], cutPick: 3.30,
-  tapFood: 3.84, foodSet: 3.90, pickerOut: [3.98, 4.26], cutDone: 4.05,
-  tapLock: 4.80, sheetOut: [5.04, 5.44], island: [5.24, 7.6],
-  rowIn: [5.52, 5.9], totalRoll: [5.62, 6.12], donutSwap: [5.56, 5.98],
-  trace: [6.12, 6.84], traceOut: [7.30, 7.80],
-  tapFoodSeg: 8.44, tapMonthly: 9.94, modeSwap: [10.0, 10.36],
-  dissolve: [11.96, 12.26],
-};
+/* ───────────────────────── Timeline: chosen cut (cuts.js) ─────────────────────────
+   reel.html?cut=story30 → 30 s narrative cut; default launch15. */
+const CUT = TABBY_CUTS[new URLSearchParams(location.search).get('cut') || 'launch15'] || TABBY_CUTS.launch15;
+const DURATION = CUT.duration;
+const T = Object.assign({}, CUT.T);
+T.dissolve = [T.close - 0.04, T.close + 0.26];
+const HAS_FRIENDS = T.tapFriends !== undefined;
+const HAS_WIDGET = T.widgetTap !== undefined;
 
 /* ───────────────────────── Demo dataset (₹, en_IN) ─────────────────────────
    Thursday 22 Oct 2026, 1:42 pm. One consistent world across every scene. */
@@ -330,6 +408,9 @@ const NEW_ROW = { title: 'Food expense', cat: 'Food', date: '22 Oct, 1:42 pm', a
 const TODAY_BEFORE = [['Transport', 120], ['Groceries', 95]];
 const TODAY_AFTER  = [['Food', 180], ['Transport', 120], ['Groceries', 95]];
 const WEEKS = [['W39', 4820], ['W40', 5360], ['W41', 4105], ['W42', 6240], ['W43', 3115]]; // Oct 1–22 = ₹15,650
+// Friends ledger (sorted by name, as the @Query does). [name, they owe you, you owe them]
+const FRIENDS = [['Arjun', 650, 0], ['Kabir', 0, 400], ['Meera', 1200, 300], ['Priya', 250, 250]];
+const ARJUN_AFTER = 1250;   // Friday dinner, ₹600 more
 const CATEGORIES = ['Food', 'Transport', 'Groceries', 'Bills', 'Shopping', 'Entertainment'];
 
 /* Theme.swift colours */
@@ -353,6 +434,8 @@ const E = {
   sheetOut: p => p < 1 ? (p * p * (2.2 * p - 1.2) * 0.55 + E.inOutCubic(p) * 0.45) : 1,
 };
 const P = (t, [a, b], e = E.inOutCubic) => e(clamp((t - a) / (b - a)));
+// WidgetCurrencyFormatter: en_IN grouping, 0–2 decimals, leading sign.
+const wfmt = v => (v < 0 ? '-' : '') + '₹' + Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 const inr = n => '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const $ = id => document.getElementById(id);
 const css = (el, o) => { for (const k in o) el.style[k] = o[k]; };
@@ -368,6 +451,20 @@ const ICONS = {
   search: '<svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5.2"/><path d="M11 11l4.3 4.3" stroke-linecap="round"/></svg>',
   house: '<svg width="24" height="21" viewBox="0 0 24 21" fill="currentColor"><path d="M12 1.2L1.6 10h2.9v9.4c0 .6.4 1 1 1h4.6v-6.2h3.8v6.2h4.6c.6 0 1-.4 1-1V10h2.9z"/></svg>',
   people: '<svg width="28" height="21" viewBox="0 0 28 21" fill="currentColor"><circle cx="10" cy="6" r="4.6"/><path d="M1.5 19.4c.6-4.6 4-7.4 8.5-7.4s7.9 2.8 8.5 7.4z"/><circle cx="20.5" cy="7" r="3.6"/><path d="M19.6 12.4c3.9-.4 6.5 2 7 6.2h-6.4c-.2-2.4-.9-4.3-2.3-5.9z"/></svg>',
+  gCal: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="22" height="20" rx="5"/><path d="M4 12h22M10 3v5M20 3v5" stroke-linecap="round"/></svg>',
+  gCam: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="24" height="17" rx="5"/><circle cx="15" cy="16.5" r="5"/><path d="M10 8l2-3h6l2 3"/></svg>',
+  gMusic: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 22V7l13-3v15"/><circle cx="8" cy="22" r="3.2"/><circle cx="21" cy="19" r="3.2"/></svg>',
+  gMap: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 26s8-7.5 8-13a8 8 0 0 0-16 0c0 5.5 8 13 8 13z"/><circle cx="15" cy="13" r="3"/></svg>',
+  gMail: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="7" width="22" height="16" rx="4"/><path d="M5 9l10 7 10-7"/></svg>',
+  gClock: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="15" cy="15" r="11"/><path d="M15 9v6l4 3"/></svg>',
+  gSun: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="15" cy="15" r="5"/><path d="M15 3v3M15 24v3M3 15h3M24 15h3M6.5 6.5l2 2M21.5 21.5l2 2M6.5 23.5l2-2M21.5 8.5l2-2"/></svg>',
+  gFolder: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9a2 2 0 0 1 2-2h6l3 3h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>',
+  gGear: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><circle cx="15" cy="15" r="4"/><path d="M15 3v4M15 23v4M3 15h4M23 15h4M6.5 6.5l2.8 2.8M20.7 20.7l2.8 2.8M6.5 23.5l2.8-2.8M20.7 9.3l2.8-2.8" stroke-linecap="round"/></svg>',
+  gNote: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="4" width="18" height="22" rx="4"/><path d="M10 11h10M10 16h10M10 21h6"/></svg>',
+  gBook: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 6h8a3 3 0 0 1 3 3v15a2 2 0 0 0-2-2H5zM25 6h-6a3 3 0 0 0-3 3v15a2 2 0 0 1 2-2h7z"/></svg>',
+  gPhone: '<svg width="30" height="30" viewBox="0 0 30 30" fill="currentColor"><path d="M9.5 4.5l3 4.5-2 2.6c1.3 2.9 3.4 5 6.3 6.3l2.6-2 4.5 3-1.6 4c-.4.9-1.3 1.4-2.3 1.2C11.8 22.8 7.2 18.2 5.9 10c-.2-1 .3-1.9 1.2-2.3z"/></svg>',
+  gChat: '<svg width="30" height="30" viewBox="0 0 30 30" fill="currentColor"><path d="M15 5C8.9 5 4 9 4 14c0 2.7 1.5 5.2 3.9 6.8L7 25l4.6-2.4c1.1.3 2.2.4 3.4.4 6.1 0 11-4 11-9S21.1 5 15 5z"/></svg>',
+  gGlobe: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><circle cx="15" cy="15" r="11"/><path d="M4 15h22M15 4c3 3 4.5 7 4.5 11S18 23 15 26c-3-3-4.5-7-4.5-11S12 7 15 4z"/></svg>',
   checkCircle: '<svg width="19" height="19" viewBox="0 0 19 19"><circle cx="9.5" cy="9.5" r="9.5" fill="rgb(230 168 56)"/><path d="M5.3 9.8l2.8 2.8 5.6-6" fill="none" stroke="#000" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   del: '<svg width="27" height="20" viewBox="0 0 27 20" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><path d="M8.5 1.5h15.2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H8.5L1.6 10z"/><path d="M12.6 6.5l7 7M19.6 6.5l-7 7" stroke-linecap="round"/></svg>',
 };
@@ -401,12 +498,54 @@ function build() {
     <span style="flex:1;position:relative">${c}</span>${c === 'Food' ? `<span id="foodCheck" style="color:var(--accent-bright);position:relative">${ICONS.check}</span>` : ''}<i class="sep"></i></div>`).join('');
 
   const keys = [['1', ''], ['2', 'ABC'], ['3', 'DEF'], ['4', 'GHI'], ['5', 'JKL'], ['6', 'MNO'], ['7', 'PQRS'], ['8', 'TUV'], ['9', 'WXYZ'], ['.', null], ['0', ''], ['del', null]];
-  $('keys').innerHTML = keys.map(([k, l]) => l === null
+  $('keys').innerHTML = $('keys2').innerHTML = keys.map(([k, l]) => l === null
     ? `<div class="k clear" data-k="${k}">${k === 'del' ? ICONS.del : '<b style="font-size:30px">.</b>'}</div>`
     : `<div class="k" data-k="${k}"><b>${k}</b><small>${l}</small></div>`).join('');
 
   $('islandLead').innerHTML = ICONS.checkCircle;
+  if (HAS_WIDGET) buildSpringboard();
+  $('fList').innerHTML = FRIENDS.map(([n], i) => `<div class="frow" style="top:${i * 52}px" id="f${n}"><i class="hl"></i><span class="n">${n}</span>
+    <span class="c" style="color:var(--accent-bright)"></span><span class="c" style="color:var(--subtle)"></span><span class="c"></span>${i < FRIENDS.length - 1 ? '<i class="sep"></i>' : ''}</div>`).join('');
   drawBars();
+}
+
+/* ───────────────────────── Home Screen ─────────────────────────
+   Generic glyph icons (no real third-party apps), the real Tabby icon, and the
+   medium "Spending Analytics" widget (AnalyticsRingsWidget, Daily mode). */
+const ICON_SRC = '../../SpendTracker/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png';
+const SB_ICONS = [['Tabby', null], ['Calendar', 'gCal'], ['Camera', 'gCam'], ['Music', 'gMusic'],
+  ['Maps', 'gMap'], ['Mail', 'gMail'], ['Clock', 'gClock'], ['Weather', 'gSun'],
+  ['Files', 'gFolder'], ['Notes', 'gNote'], ['Books', 'gBook'], ['Settings', 'gGear']];
+const SB_COL = [27, 121.7, 216.3, 311], SB_ROW = [272, 370, 468];
+const TABBY_ICON = { x: SB_COL[0], y: SB_ROW[0], w: 64, h: 64 };
+const WIDGET_RECT = { x: 27, y: 70, w: 348, h: 163 };
+// Widget ring palette (AnalyticsRingsWidget.ringPalette) — differs from the in-app chart palette.
+const WRING = ['rgb(255 214 110)', 'rgb(230 168 56)', 'rgb(247 128 51)', 'rgb(171 115 245)', 'rgb(64 179 184)', 'rgb(245 87 117)'];
+function buildSpringboard() {
+  let h = `<div class="widget" id="widget"><div class="ringBox"><svg width="90" height="90" viewBox="0 0 90 90" id="wRing"></svg>
+    <div class="ctr"><span class="t">Today</span><span class="v" id="wTotal"></span></div></div><div class="leg" id="wLeg"></div></div>
+    <div class="sbLabel" style="left:27px;width:348px;top:240px">Tabby</div>`;
+  SB_ICONS.forEach(([name, g], i) => {
+    const x = SB_COL[i % 4], y = SB_ROW[Math.floor(i / 4)];
+    h += `<div class="appIcon" style="left:${x}px;top:${y}px">${g ? ICONS[g] : `<img src="${ICON_SRC}" alt="">`}</div>
+      <div class="sbLabel" style="left:${x - 12}px;width:88px;top:${y + 70}px">${name}</div>`;
+  });
+  h += `<div id="sbSearch">${ICONS.search.replace('width="17" height="17"', 'width="12" height="12"')}Search</div><div id="sbDock"></div>`;
+  ['gPhone', 'gChat', 'gGlobe', 'gMusic'].forEach((g, i) => { h += `<div class="appIcon" style="left:${SB_COL[i]}px;top:791px">${ICONS[g]}</div>`; });
+  $('springboard').innerHTML = h;
+}
+function drawWidget(totals) {
+  const sum = totals.reduce((a, [, v]) => a + v, 0), r = 39, C = 2 * Math.PI * r;
+  let start = 0, g = '';
+  totals.forEach(([, v], i) => {
+    const f = v / sum;
+    g += `<circle cx="45" cy="45" r="${r}" fill="none" stroke="${WRING[i]}" stroke-width="12" stroke-dasharray="${f * C} ${C}"
+      stroke-dashoffset="${-start * C}" transform="rotate(-90 45 45)"/>`;
+    start += f;
+  });
+  $('wRing').innerHTML = g;
+  $('wTotal').textContent = wfmt(sum);
+  $('wLeg').innerHTML = totals.slice(0, 4).map(([c, v], i) => `<div><i style="background:${WRING[i]}"></i>${c}<b>${wfmt(v)}</b></div>`).join('');
 }
 
 /* ───────────────────────── Charts ───────────────────────── */
@@ -450,27 +589,7 @@ function drawBars() {
 
 /* ───────────────────────── Camera ─────────────────────────
    {fx, fy}: focus point in screen pt; s: scale; {X, Y}: where the focus lands on stage. */
-const HOME   = { fx: 201, fy: 437, s: 1.50, X: 540, Y: 1122 };
-const CAM = [
-  [0.00, { ...HOME, s: 1.58, Y: 1150 }],
-  [1.25, HOME, E.outCubic],
-  [2.20, HOME, 'hold'],
-  [2.20, { fx: 201, fy: 455, s: 2.52, X: 540, Y: 1010 }, 'cut'],            // closer: amount + keypad
-  [3.30, { fx: 201, fy: 452, s: 2.62, X: 540, Y: 1010 }, E.linear],
-  [3.30, { fx: 201, fy: 610, s: 2.10, X: 540, Y: 1090 }, 'cut'],            // the picker
-  [4.05, { fx: 201, fy: 606, s: 2.16, X: 540, Y: 1090 }, E.linear],
-  [4.05, { fx: 201, fy: 437, s: 1.58, X: 540, Y: 1134 }, 'cut'],            // completed entry
-  [5.00, { fx: 201, fy: 437, s: 1.62, X: 540, Y: 1128 }, E.linear],
-  [5.50, HOME, E.inOutCubic],
-  [5.90, HOME, 'hold'],
-  [7.10, { fx: 201, fy: 400, s: 1.76, X: 540, Y: 1150 }, E.inOutSine],      // push in: total + new row
-  [8.00, { fx: 201, fy: 400, s: 1.79, X: 540, Y: 1150 }, E.linear],
-  [8.62, { fx: 201, fy: 336, s: 2.20, X: 540, Y: 1222 }, E.inOutCubic],     // the donut
-  [10.0, { fx: 201, fy: 336, s: 2.24, X: 540, Y: 1222 }, E.linear],
-  [10.3, { fx: 201, fy: 336, s: 2.24, X: 540, Y: 1222 }, 'hold'],
-  [11.6, { fx: 201, fy: 330, s: 1.62, X: 540, Y: 1080 }, E.inOutCubic],     // pull back: whole panel
-  [12.6, { fx: 201, fy: 330, s: 1.58, X: 540, Y: 1080 }, E.linear],
-];
+const CAM = CUT.cam.map(([t, st, e]) => [t, st, typeof e === 'string' && E[e] ? E[e] : e]);
 function camAt(t) {
   let i = 0;
   for (let k = 0; k < CAM.length; k++) if (CAM[k][0] <= t) i = k;
@@ -494,9 +613,19 @@ const TOUCHES = [
   { t: T.tapFoodSeg, x: 255, y: 328, r: 15 },
   { t: T.tapMonthly, x: 213, y: 158, r: 15 },
 ];
+if (HAS_WIDGET) TOUCHES.push({ t: T.widgetTap, x: 201, y: 153, r: 24 });
+if (HAS_FRIENDS) TOUCHES.push(
+  { t: T.tapFriends, x: 252, y: 825, r: 19 },
+  { t: T.tapArjun, x: 120, y: 218, r: 18 },
+  { t: T.tapField, x: 120, y: 286, r: 18 },
+  ...T.dels.map(d => ({ t: d, x: 333, y: 769, r: 14, soft: true })),
+  ...T.keys2.map(([d, k]) => ({ t: d, x: { 1: 69, 2: 201, 5: 201, 0: 201 }[k], y: { 1: 607, 2: 607, 5: 661, 0: 769 }[k], r: 14, soft: true })),
+  { t: T.tapSave, x: 350, y: 94, r: 18 },
+);
 function touchMarkup(t, s) {
   let g = '';
   for (const k of TOUCHES) {
+    if (!Number.isFinite(k.t)) continue;
     const d = t - k.t;
     if (d < -0.16 || d > 0.55) continue;
     const lw = 2.6 / s * 1.6, gold = 'rgb(255 214 110)';
@@ -528,15 +657,15 @@ function headline(el, t, tin, tout) {
 }
 
 /* ───────────────────────── Hook arc (stage space) ───────────────────────── */
-const hookPath = 'M 868 302 C 960 300, 1004 420, 1000 640 C 996 900, 984 1150, 926 1340 C 892 1450, 852 1520, 812 1556';
+const HOOK_DEFAULT = 'M 868 302 C 960 300, 1004 420, 1000 640 C 996 900, 984 1150, 926 1340 C 892 1450, 852 1520, 812 1556';
 function hook(t) {
   const svg = $('hookSvg');
-  const draw = P(t, [0.28, 1.38], E.inOutCubic), fade = 1 - P(t, [1.42, 1.72], E.outCubic);
-  if (t > 1.75) { svg.innerHTML = ''; return; }
+  const draw = P(t, CUT.hook.draw, E.inOutCubic), fade = 1 - P(t, CUT.hook.fade, E.outCubic);
+  if (t > CUT.hook.fade[1] + 0.03) { svg.innerHTML = ''; return; }
   if (!svg.firstChild) {
     svg.innerHTML = `<defs><linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(230 168 56 / .15)"/><stop offset=".6" stop-color="rgb(230 168 56)"/><stop offset="1" stop-color="rgb(255 214 110)"/></linearGradient>
       <filter id="hglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9"/></filter></defs>
-      <path id="hookP" d="${hookPath}" fill="none" stroke="url(#hg)" stroke-width="3.2" stroke-linecap="round"/>
+      <path id="hookP" d="${CUT.hook.path || HOOK_DEFAULT}" fill="none" stroke="url(#hg)" stroke-width="3.2" stroke-linecap="round"/>
       <circle id="hookHalo" r="22" fill="rgba(255 214 110 / .55)" filter="url(#hglow)"/><circle id="hookDot" r="9" fill="rgb(255 214 110)"/>`;
   }
   const p = $('hookP'), L = p.getTotalLength();
@@ -544,7 +673,7 @@ function hook(t) {
   p.style.strokeDashoffset = String(L * (1 - draw));
   p.style.opacity = String(fade);
   const pt = p.getPointAtLength(Math.max(0.01, L * draw));
-  const dotOn = clamp((t - 0.22) / 0.12) * fade;
+  const dotOn = clamp((t - CUT.hook.draw[0] + 0.06) / 0.12) * fade;
   for (const id of ['hookDot', 'hookHalo']) { const c = $(id); c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y); c.style.opacity = String(dotOn); }
 }
 
@@ -555,7 +684,8 @@ function brandClose(t) {
   if (!on) return;
   const svg = $('closeSvg');
   const cx = 540, cy = 750, R = 236, C = 2 * Math.PI * R;
-  const draw = P(t, [12.06, 12.52], E.inOutCubic);
+  const c0 = T.close;
+  const draw = P(t, [c0 + 0.06, c0 + 0.52], E.inOutCubic);
   if (!svg.firstChild) {
     svg.innerHTML = `<defs><linearGradient id="cg" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgb(255 214 110)"/><stop offset=".5" stop-color="rgb(230 168 56)"/><stop offset="1" stop-color="rgba(230 168 56 / .2)"/></linearGradient>
       <filter id="cglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="10"/></filter></defs>
@@ -567,21 +697,109 @@ function brandClose(t) {
   const arc = $('cArc');
   arc.setAttribute('stroke-dasharray', `${arcLen} ${C}`);
   arc.setAttribute('stroke-dashoffset', String(-0.08 * C));
-  $('cTrack').style.opacity = String(P(t, [12.02, 12.3]));
+  $('cTrack').style.opacity = String(P(t, [c0 + 0.02, c0 + 0.3]));
   // Bright dot rides the arc head, then settles where TabbyOrbit keeps it.
   const head = (-88 * Math.PI / 180) + (0.08 + 0.65 * draw) * 2 * Math.PI;
-  const breathe = t > 12.6 ? 0.06 * Math.sin((t - 12.6) * 2.6) : 0;
+  const breathe = t > c0 + 0.6 ? 0.06 * Math.sin((t - c0 - 0.6) * 2.6) : 0;
   for (const id of ['cDot', 'cHalo']) {
     const c = $(id); c.setAttribute('cx', cx + R * Math.cos(head)); c.setAttribute('cy', cy + R * Math.sin(head));
-    c.style.opacity = String(clamp((t - 12.06) / 0.1) * (id === 'cHalo' ? 0.85 + breathe : 1));
+    c.style.opacity = String(clamp((t - c0 - 0.06) / 0.1) * (id === 'cHalo' ? 0.85 + breathe : 1));
   }
-  const ip = P(t, [12.2, 12.52], E.outCubic);
+  const ip = P(t, [c0 + 0.2, c0 + 0.52], E.outCubic);
   css($('icon'), { opacity: String(ip), transform: `scale(${lerp(0.86, 1, ip)})` });
   const rise = (el, a, b, dy = 26) => { const p = P(t, [a, b], E.outCubic); css(el, { opacity: String(p), transform: `translateY(${(1 - p) * dy}px)` }); };
-  rise($('brandName'), 12.28, 12.54);
-  rise($('tagline'), 12.34, 12.58);
-  const cp = P(t, [12.38, 12.6], E.outCubic);
+  rise($('brandName'), c0 + 0.28, c0 + 0.54);
+  rise($('tagline'), c0 + 0.34, c0 + 0.58);
+  const cp = P(t, [c0 + 0.38, c0 + 0.6], E.outCubic);
   css($('cta'), { opacity: String(cp), transform: `translateX(-50%) translateY(${(1 - cp) * 22}px)` });
+}
+
+/* Editorial gold outline: traced around a row, a leading dot, then fades. */
+function traceRow(t, c, inR, outR, x, y, w, h, r = 16) {
+  const tr = P(t, inR, E.inOutCubic), trOut = 1 - P(t, outR, E.inOutSine);
+  if (tr <= 0 || trOut <= 0) return '';
+  const per = 2 * (w + h - 4 * r) + 2 * Math.PI * r, k = 1.5 / c.s;
+  const rr = `M ${x + r} ${y} H ${x + w - r} A ${r} ${r} 0 0 1 ${x + w} ${y + r} V ${y + h - r} A ${r} ${r} 0 0 1 ${x + w - r} ${y + h} H ${x + r} A ${r} ${r} 0 0 1 ${x} ${y + h - r} V ${y + r} A ${r} ${r} 0 0 1 ${x + r} ${y} Z`;
+  let g = `<path d="${rr}" fill="rgba(230 168 56 / ${0.07 * tr * trOut})" stroke="rgb(255 214 110)" stroke-width="${3.2 * k}" stroke-linecap="round"
+    stroke-dasharray="${per * tr} ${per}" opacity="${trOut}" style="filter:drop-shadow(0 0 ${4 * k}px rgba(255 214 110 / .8))"/>`;
+  if (tr < 1) {
+    const probe = document.createElementNS('http://www.w3.org/2000/svg', 'path'); probe.setAttribute('d', rr);
+    const pt = probe.getPointAtLength(per * tr);
+    g += `<circle cx="${pt.x}" cy="${pt.y}" r="${5 * k}" fill="rgb(255 214 110)" style="filter:drop-shadow(0 0 ${6 * k}px rgb(255 214 110))"/>`;
+  }
+  return g;
+}
+
+/* Friends tab + Edit Friend sheet (story cut only). Returns the sheet's presentation progress. */
+function friends(t) {
+  if (!HAS_FRIENDS) return 0;
+  const on = t >= T.tapFriends + 0.04;
+  $('friendsTab').style.display = on ? 'block' : 'none';
+  $('tabHome').classList.toggle('on', !on);
+  $('tabFriends').classList.toggle('on', on);
+  if (!on) return 0;
+
+  const saved = t >= T.tapSave + 0.08;
+  FRIENDS.forEach(([n, owe, owed]) => {
+    const theyOwe = n === 'Arjun' && saved ? ARJUN_AFTER : owe, net = theyOwe - owed;
+    const cells = $('f' + n).querySelectorAll('.c');
+    cells[0].textContent = wfmt(theyOwe); cells[1].textContent = wfmt(owed); cells[2].textContent = wfmt(net);
+    cells[2].style.color = net >= 0 ? 'var(--accent-bright)' : 'rgba(255 59 48 / .82)';
+  });
+  $('fArjun').querySelector('.hl').style.opacity = String(clamp(1 - Math.abs(t - T.tapArjun - 0.06) / 0.16));
+  const agg0 = FRIENDS.reduce((s, [, a, b]) => s + a - b, 0), agg1 = agg0 + ARJUN_AFTER - FRIENDS[0][1];
+  const agg = Math.round(lerp(agg0, agg1, P(t, T.aggRoll, E.outCubic)));
+  $('aggNet').textContent = wfmt(agg);
+  $('aggNet').style.color = agg >= 0 ? 'var(--accent-bright)' : 'rgba(255 59 48 / .82)';
+
+  // Sheet
+  const p = t < T.editOut[0] ? P(t, T.editIn, E.spring) : 1 - P(t, T.editOut, E.inOutCubic);
+  $('fsheet').style.display = p > 0.001 ? 'block' : 'none';
+  $('fsheet').style.transform = `translateY(${lerp(874, 62, p)}px)`;
+  let txt = '650';
+  for (const d of T.dels) if (t >= d + 0.03) txt = txt.slice(0, -1);
+  for (const [d, k] of T.keys2) if (t >= d + 0.03) txt += k;
+  $('oweTxt').textContent = txt;
+  const focused = t >= T.tapField + 0.04;
+  const lastKey = Math.max(T.tapField, ...[...T.dels, ...T.keys2.map(([d]) => d)].filter(d => d <= t));
+  $('oweCaret').style.display = focused && ((t - lastKey < 0.5) || Math.floor((t - lastKey) / 0.5) % 2 === 0) ? 'block' : 'none';
+  $('saveBtn').style.background = Math.abs(t - T.tapSave - 0.05) < 0.1 ? 'rgba(255 255 255 / .2)' : 'rgba(255 255 255 / .08)';
+  const kb = P(t, T.kb2In, E.spring);
+  $('keyboard2').style.display = kb > 0.001 ? 'block' : 'none';
+  $('keyboard2').style.top = `${lerp(874, 574, kb) - 62}px`;
+  document.querySelectorAll('#keys2 .k').forEach(k => {
+    const hit = [...T.keys2, ...T.dels.map(d => [d, 'del'])].find(([d, ch]) => ch === k.dataset.k && t >= d - 0.02 && t < d + 0.12);
+    k.style.background = k.classList.contains('clear') ? (hit ? 'rgba(255 255 255 / .18)' : 'transparent') : hit ? 'rgb(150 150 156)' : 'rgb(98 98 102)';
+  });
+  return p;
+}
+
+/* Home Screen bookend: the widget before launch, the app zooming out of it,
+   and the swipe home into the Tabby icon. Clips #app to a rounded rect. */
+function springboard(t) {
+  const app = $('app');
+  if (!HAS_WIDGET) return;
+  const lP = P(t, T.launch, E.inOutCubic), hP = P(t, T.homeOut, E.inOutCubic);
+  const onHome = t < T.launch[0] || t >= T.homeOut[1];
+  const sbVisible = t < T.launch[1] || t >= T.homeOut[0];
+  $('springboard').style.display = sbVisible ? 'block' : 'none';
+  if (sbVisible) {
+    drawWidget(t < T.homeOut[0] ? TODAY_BEFORE : TODAY_AFTER);
+    // The Home Screen recedes as the app opens, settles back as it closes.
+    const k = t < T.homeOut[0] ? lP : 1 - hP;
+    css($('springboard'), { transform: `scale(${lerp(1, 1.08, k)})`, filter: `blur(${k * 6}px)`, opacity: String(1 - k * 0.6) });
+    $('widget').style.transform = `scale(${1 - clamp(1 - Math.abs(t - T.widgetTap - 0.05) / 0.12) * 0.035})`;
+  }
+  app.style.display = onHome ? 'none' : 'block';
+  if (onHome) return;
+  const full = { x: 0, y: 0, w: 402, h: 874 };
+  let from, p;
+  if (t < T.launch[1]) { from = WIDGET_RECT; p = lP; } else if (t >= T.homeOut[0]) { from = TABBY_ICON; p = 1 - hP; } else { from = full; p = 1; }
+  const x = lerp(from.x, 0, p), y = lerp(from.y, 0, p), w = lerp(from.w, 402, p), h = lerp(from.h, 874, p), r = lerp(from === TABBY_ICON ? 15 : 26, 56, p);
+  // iOS scales the whole app into/out of the source rect (uniform scale, top-aligned clip).
+  const sx = w / 402;
+  css(app, { transformOrigin: '0 0', transform: p >= 1 ? '' : `translate(${x}px, ${y}px) scale(${sx})`,
+    clipPath: p >= 1 ? '' : `inset(0 0 ${Math.max(0, 874 - h / sx)}px 0 round ${r / sx}px)`, opacity: String(clamp(p * 3)) });
 }
 
 /* ───────────────────────── Frame ───────────────────────── */
@@ -594,7 +812,7 @@ function renderFrame(t, plate) {
   css($('cam'), { transform: `translate(${c.X - c.fx * c.s}px, ${c.Y - c.fy * c.s}px) scale(${c.s * lerp(1, 0.965, dis)})`, opacity: String(1 - dis) });
   const [gx, gy] = toStage(c, 201, 380);
   const glowY = lerp(gy, 750, dis), glowX = lerp(gx, 540, dis);
-  css($('bgGlow'), { transform: `translate(${glowX - 750}px, ${glowY - 750}px) scale(${lerp(0.9 + 0.08 * P(t, [0, 1.3]), 0.62, dis)})`, opacity: String(lerp(0.75, 0.9, dis)) });
+  css($('bgGlow'), { transform: `translate(${glowX - 750}px, ${glowY - 750}px) scale(${lerp(0.9 + 0.08 * P(t, [0, CUT.hook.settle + 0.05]), 0.62, dis)})`, opacity: String(lerp(0.75, 0.9, dis)) });
 
   // Plate (a real recording frame) or the rebuilt UI
   const pl = $('plate');
@@ -605,17 +823,20 @@ function renderFrame(t, plate) {
   const drift = (Math.sin((t / 7) * Math.PI - Math.PI / 2) + 1) / 2;
   $('homeBackdrop').style.setProperty('--gx', `${lerp(-360, 402 - 360, drift)}px`);
 
+  springboard(t);
+
   /* Sheet presentation */
   const sIn = P(t, T.sheetIn, E.spring), sOut = P(t, T.sheetOut, E.inOutCubic);
   const sheetP = t < T.sheetOut[0] ? sIn : 1 - sOut;
   const sheetTop = lerp(874, 62, sheetP);
   $('sheet').style.display = sheetP > 0.001 ? 'block' : 'none';
   $('sheet').style.transform = `translateY(${sheetTop}px)`;
+  const presented = Math.max(sheetP, friends(t));
   const pIn = P(t, T.pickerIn, E.spring), pOut = P(t, T.pickerOut, E.inOutCubic);
   const pickP = t < T.pickerOut[0] ? pIn : 1 - pOut;
   // Presenting views recede (scale + dim), like iOS sheet stacks.
-  css($('home'), { transform: `translateY(${sheetP * 8}px) scale(${lerp(1, 0.93, sheetP)})`, borderRadius: `${sheetP * 40}px` });
-  $('dim1').style.opacity = String(sheetP * 0.42);
+  css($('home'), { transform: `translateY(${presented * 8}px) scale(${lerp(1, 0.93, presented)})`, borderRadius: `${presented * 40}px` });
+  $('dim1').style.opacity = String(presented * 0.42);
   $('sheet').style.transform += ` scale(${lerp(1, 0.94, pickP)})`;
   $('dim2').style.opacity = String(pickP * 0.36);
   $('picker').style.display = pickP > 0.001 ? 'block' : 'none';
@@ -722,26 +943,24 @@ function renderFrame(t, plate) {
   $('islandLead').style.opacity = String(io); $('islandTrail').style.opacity = String(io);
 
   /* Film treatment in screen space: touch rings + the traced new row */
-  let fx = touchMarkup(t, c.s);
-  const tr = P(t, T.trace, E.inOutCubic), trOut = 1 - P(t, T.traceOut, E.inOutSine);
-  if (tr > 0 && trOut > 0) {
-    const x = 11, y = 525, w = 380, h = 60, r = 16, per = 2 * (w + h - 4 * r) + 2 * Math.PI * r;
-    const rr = `M ${x + r} ${y} H ${x + w - r} A ${r} ${r} 0 0 1 ${x + w} ${y + r} V ${y + h - r} A ${r} ${r} 0 0 1 ${x + w - r} ${y + h} H ${x + r} A ${r} ${r} 0 0 1 ${x} ${y + h - r} V ${y + r} A ${r} ${r} 0 0 1 ${x + r} ${y} Z`;
-    const sw = 3.2 / c.s * 1.5;
-    fx += `<path d="${rr}" fill="rgba(230 168 56 / ${0.07 * tr * trOut})" stroke="rgb(255 214 110)" stroke-width="${sw}" stroke-linecap="round"
-      stroke-dasharray="${per * tr} ${per}" opacity="${trOut}" style="filter:drop-shadow(0 0 ${4 / c.s * 1.5}px rgba(255 214 110 / .8))"/>`;
-    if (tr < 1) {
-      const probe = document.createElementNS('http://www.w3.org/2000/svg', 'path'); probe.setAttribute('d', rr);
-      const pt = probe.getPointAtLength(per * tr);
-      fx += `<circle cx="${pt.x}" cy="${pt.y}" r="${5 / c.s * 1.5}" fill="rgb(255 214 110)" style="filter:drop-shadow(0 0 ${6 / c.s * 1.5}px rgb(255 214 110))"/>`;
+  let fx = touchMarkup(t, c.s) + traceRow(t, c, T.trace, T.traceOut, 11, 525, 380, 60);
+  if (HAS_WIDGET) {
+    fx += traceRow(t, c, T.trace3, T.traceOut3, 22, 65, 358, 173, 30);
+    // Swipe up from the home indicator: a gold touch travelling upward.
+    const sw = (t - T.homeOut[0] + 0.12) / 0.42;
+    if (sw > 0 && sw < 1) {
+      const y = lerp(864, 640, E.outCubic(sw)), k = 1.5 / c.s;
+      fx += `<circle cx="201" cy="${y}" r="${16}" fill="rgba(255 214 110 / .22)" stroke="rgb(255 214 110)" stroke-width="${2.6 * k}" opacity="${Math.sin(Math.PI * sw)}"/>`;
     }
   }
+  if (HAS_FRIENDS) fx += traceRow(t, c, T.trace2, T.traceOut2, 12, 190, 378, 56);
   $('fx').innerHTML = fx;
 
   /* Editorial layer */
   // Scrim only while a headline is on screen, so close-ups stay clean.
-  const hv = Math.max(headline($('h1'), t, 0.04, 1.42), headline($('h2'), t, 4.08, 5.42),
-                      headline($('h3'), t, 5.86, 7.84), headline($('h4'), t, 8.18, 11.82));
+  let hv = 0;
+  for (const [id, tin, tout] of CUT.heads) hv = Math.max(hv, headline($(id), t, tin, tout));
+  document.querySelectorAll('.head').forEach(h => { if (!CUT.heads.some(([id]) => id === h.id)) h.style.display = 'none'; });
   $('scrim').style.opacity = String(hv * (1 - dis));
   hook(t);
   brandClose(t);
@@ -751,7 +970,8 @@ function renderFrame(t, plate) {
 
 /* ───────────────────────── Boot ───────────────────────── */
 window.renderFrame = renderFrame;
-window.REEL = { DURATION, T };
+window.REEL = { DURATION, T, narrated: !!CUT.vo };
+$('scrub').max = DURATION;
 window.reelReady = document.fonts.ready.then(() => { build(); renderFrame(0); return Promise.all([...document.images].map(i => i.decode().catch(() => {}))); });
 
 if (!/[?&]render\b/.test(location.search)) {

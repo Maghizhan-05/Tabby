@@ -2,7 +2,7 @@
 // Synthesized sound design for the Tabby reel, timed to reel.html's timeline.
 // Pure Node (no dependencies): writes a 48 kHz stereo 16-bit WAV.
 //
-//   node audio/sound-design.mjs out/tabby-reel-audio.wav
+//   node audio/sound-design.mjs out/tabby-reel-audio.wav [launch15|story30]
 //
 // Palette, all in A major so the whole film resolves home:
 //   0.00  warm pluck (A4) + quiet rising air sweep          — the hook
@@ -12,8 +12,12 @@
 //   8.44 / 9.94  two rhythmic accents · 10.36 tonal lift    — the bigger picture
 //  12.10  two-note signature E5 → A5, left to ring out      — the brand close
 import { writeFileSync } from 'node:fs';
+import '../cuts.js';
 
-const SR = 48000, DUR = 15, N = SR * DUR;
+const CUT = globalThis.TABBY_CUTS[process.argv[3] || 'launch15'];
+if (!CUT) throw new Error(`unknown cut: ${process.argv[3]}`);
+const T = CUT.T;
+const SR = 48000, DUR = CUT.duration, N = SR * DUR;
 const L = new Float32Array(N), R = new Float32Array(N);
 const sendL = new Float32Array(N), sendR = new Float32Array(N);   // reverb bus
 const TAU = Math.PI * 2;
@@ -109,52 +113,87 @@ function bassHit(t0, f, { gain = 0.26, len = 0.55 } = {}) {
   }
 }
 
-/* ───────────── Score ───────────── */
+/* ───────────── Score (every cue derived from the cut's timeline in cuts.js) ───────────── */
 const A2 = 45, E3 = 52, Cs4 = 61, E4 = 64, A4 = 69, B4 = 71, Cs5 = 73, E5 = 76, A5 = 81, Cs6 = 85, E6 = 88;
+const tap = (t, p = 0, g = 0.12, f = 1900) => noiseBurst(t, { gain: g, tone: 0.3, toneF: f, decay: 0.005, p });
+const key = (t, p = 0) => noiseBurst(t, { gain: 0.13, tone: 0.2, toneF: 3100, decay: 0.0035, p, rev: 0.04 });
+const rise = (t0, t1, g = 0.026) => sweep(t0, t1, 700, 2300, { gain: g, q: 1.4, rev: 0.2, shape: 'arch' });
+const fall = (t0, t1, g = 0.02) => sweep(t0, t1, 2400, 650, { gain: g, q: 1.3, rev: 0.25, shape: 'arch' });
+const confirm = t => {
+  noiseBurst(t, { gain: 0.32, tone: 0.55, toneF: 1850, decay: 0.008, rev: 0.02, len: 0.04 });
+  noiseBurst(t + 0.018, { gain: 0.2, tone: 0.7, toneF: 3700, decay: 0.006, rev: 0.02, len: 0.03 });
+};
+const narrated = !!CUT.vo;
+const entry = T.tapAdd ?? T.widgetTap;   // first tap: Add spend, or the Home Screen widget          // leave room for the voice: a quieter bed
+const bed = narrated ? 0.75 : 1;
 
 // The hook
 pluck(0.0, hz(A4), { gain: 0.34, decay: 1.4, rev: 0.45 });
 pluck(0.0, hz(A4 - 12), { gain: 0.12, decay: 1.6, rev: 0.3 });
-sweep(0.12, 1.55, 260, 3600, { gain: 0.05, q: 1.1, rev: 0.5 });
-pad(0.05, 5.6, [A2 + 12, E3 + 12, Cs4, B4], { gain: 0.016, fadeIn: 1.2, fadeOut: 0.6 });
+sweep(0.12, entry, 260, 3600, { gain: 0.05 * bed, q: 1.1, rev: 0.5 });
+pad(0.05, T.rowIn[0] + 0.1, [A2 + 12, E3 + 12, Cs4, B4], { gain: 0.016 * bed, fadeIn: 1.2, fadeOut: 0.6 });
 
 // The small action
-noiseBurst(1.55, { gain: 0.16, tone: 0.35, toneF: 1700, decay: 0.006, p: 0.2 });            // tap: Add spend
-sweep(1.64, 2.12, 700, 2200, { gain: 0.028, q: 1.4, rev: 0.2, shape: 'arch' });              // sheet rises
-for (const [t, p] of [[2.42, -0.15], [2.70, 0], [2.98, 0.1]])                                  // keypad clicks
-  noiseBurst(t, { gain: 0.13, tone: 0.2, toneF: 3100, decay: 0.0035, p, rev: 0.04 });
-noiseBurst(3.24, { gain: 0.12, tone: 0.3, toneF: 1900, decay: 0.005, p: 0.15 });             // tap: category
-sweep(3.28, 3.66, 900, 2600, { gain: 0.022, q: 1.4, rev: 0.2, shape: 'arch' });              // picker rises
-noiseBurst(3.84, { gain: 0.12, tone: 0.3, toneF: 2100, decay: 0.005, p: -0.1 });             // tap: Food
-sweep(3.98, 4.26, 2400, 900, { gain: 0.018, q: 1.4, rev: 0.2, shape: 'arch' });              // picker drops
-// Dry confirmation tick at "Lock it in"
-noiseBurst(4.80, { gain: 0.32, tone: 0.55, toneF: 1850, decay: 0.008, rev: 0.02, len: 0.04 });
-noiseBurst(4.818, { gain: 0.2, tone: 0.7, toneF: 3700, decay: 0.006, rev: 0.02, len: 0.03 });
-sweep(5.02, 5.44, 2400, 600, { gain: 0.022, q: 1.3, rev: 0.25, shape: 'arch' });            // sheet dismiss
+tap(entry, 0.2, 0.16, 1700);
+if (T.launch) sweep(T.launch[0] - 0.02, T.launch[1], 300, 2600, { gain: 0.03, q: 1.2, rev: 0.3, shape: 'arch' });   // app opens
+rise(T.sheetIn[0] - 0.02, T.sheetIn[1]);
+T.keys.forEach(([t], i) => key(t, -0.15 + i * 0.12));
+tap(T.tapCat, 0.15);
+rise(T.pickerIn[0] - 0.02, T.pickerIn[1], 0.022);
+tap(T.tapFood, -0.1, 0.12, 2100);
+fall(T.pickerOut[0], T.pickerOut[1], 0.018);
+confirm(T.tapLock);
+fall(T.sheetOut[0] - 0.02, T.sheetOut[1], 0.022);
 
 // The payoff: soft resolved bell, then the warm bass pulse joins (96 bpm)
-bell(5.52, hz(A5), { gain: 0.11, decay: 2.0, p: 0.1 });
-bell(5.53, hz(E5), { gain: 0.07, decay: 1.8, p: -0.2 });
-pluck(5.52, hz(Cs5), { gain: 0.06, decay: 1.0, bright: 0.6 });
-const beat = 60 / 96;
-for (let t = 5.52, i = 0; t < 11.9; t += beat, i++) bassHit(t, hz(i % 4 === 3 ? E3 - 24 : A2 - 12), { gain: i === 0 ? 0.22 : 0.15 });
-pad(5.5, 12.15, [A2 + 12, E3 + 12, Cs4, E4, B4], { gain: 0.02, fadeIn: 0.5, fadeOut: 0.35 });
+const pay = T.rowIn[0];
+bell(pay, hz(A5), { gain: 0.11, decay: 2.0, p: 0.1 });
+bell(pay + 0.01, hz(E5), { gain: 0.07, decay: 1.8, p: -0.2 });
+pluck(pay, hz(Cs5), { gain: 0.06, decay: 1.0, bright: 0.6 });
+const beat = 60 / 96, end = T.close - 0.1;
+for (let t = pay, i = 0; t < end; t += beat, i++) bassHit(t, hz(i % 4 === 3 ? E3 - 24 : A2 - 12), { gain: (i === 0 ? 0.22 : 0.15) * bed });
+pad(pay - 0.02, T.close + 0.15, [A2 + 12, E3 + 12, Cs4, E4, B4], { gain: 0.02 * bed, fadeIn: 0.5, fadeOut: 0.35 });
 
 // The bigger picture: two rhythmic accents, then a light tonal lift
-for (const t of [8.44, 9.94]) {
+for (const t of [T.tapFoodSeg, T.tapMonthly]) {
   noiseBurst(t, { gain: 0.1, tone: 0.6, toneF: 980, decay: 0.03, len: 0.12, rev: 0.25 });
   pluck(t, hz(E5), { gain: 0.07, decay: 0.5, bright: 0.4, rev: 0.4 });
 }
-[[10.36, A5], [10.46, Cs6], [10.56, E6]].forEach(([t, m], i) => bell(t, hz(m), { gain: 0.045, decay: 1.4, p: -0.3 + i * 0.3 }));
-sweep(10.3, 11.5, 500, 5200, { gain: 0.022, q: 1.2, rev: 0.6 });
+const lift = T.modeSwap[1];
+[[lift, A5], [lift + 0.1, Cs6], [lift + 0.2, E6]].forEach(([t, m], i) => bell(t, hz(m), { gain: 0.045, decay: 1.4, p: -0.3 + i * 0.3 }));
+sweep(lift - 0.06, lift + 1.14, 500, 5200, { gain: 0.022 * bed, q: 1.2, rev: 0.6 });
 
-// The brand close: warm two-note signature, final note resolves naturally by 15 s
-pluck(12.1, hz(E5), { gain: 0.26, decay: 1.2, rev: 0.5, p: -0.1 });
-bell(12.1, hz(E5), { gain: 0.05, decay: 1.4 });
-pluck(12.48, hz(A4), { gain: 0.3, decay: 1.7, rev: 0.55, len: 2.52, p: 0.05 });
-pluck(12.48, hz(A4 - 12), { gain: 0.12, decay: 1.9, rev: 0.4, len: 2.52 });
-bell(12.48, hz(A5), { gain: 0.06, decay: 1.9, len: 2.52 });
-bassHit(12.48, hz(A2 - 12), { gain: 0.24, len: 1.2 });
+// Friends: tab, row, sheet, field, deletes + keys, Save tick, the ledger resolves
+if (T.tapFriends !== undefined) {
+  tap(T.tapFriends, 0.25, 0.13, 1600);
+  pluck(T.tapFriends + 0.02, hz(Cs5), { gain: 0.05, decay: 0.6, bright: 0.5, rev: 0.4 });
+  tap(T.tapArjun, -0.1);
+  rise(T.editIn[0] - 0.02, T.editIn[1]);
+  tap(T.tapField, -0.05, 0.1);
+  T.dels.forEach((t, i) => key(t, 0.25 - i * 0.05));
+  T.keys2.forEach(([t], i) => key(t, -0.15 + i * 0.1));
+  confirm(T.tapSave);
+  fall(T.editOut[0], T.editOut[1]);
+  bell(T.aggRoll[0], hz(E5), { gain: 0.07, decay: 1.6, p: 0.15 });
+  bell(T.aggRoll[0] + 0.12, hz(A5), { gain: 0.06, decay: 1.8, p: -0.15 });
+}
+
+// Home Screen return: swipe whoosh, the widget has caught up
+if (T.homeOut) {
+  sweep(T.homeOut[0] - 0.1, T.homeOut[1], 2600, 400, { gain: 0.03, q: 1.2, rev: 0.3, shape: 'arch' });
+  bell(T.trace3[0], hz(Cs6), { gain: 0.045, decay: 1.5, p: 0.2 });
+  bell(T.trace3[0] + 0.1, hz(E6), { gain: 0.035, decay: 1.6, p: -0.2 });
+}
+
+// The brand close: warm two-note signature, final note resolves naturally at the end
+const c0 = T.close, tail = CUT.duration - (c0 + 0.48);
+pluck(c0 + 0.1, hz(E5), { gain: 0.26, decay: 1.2, rev: 0.5, p: -0.1 });
+bell(c0 + 0.1, hz(E5), { gain: 0.05, decay: 1.4 });
+pluck(c0 + 0.48, hz(A4), { gain: 0.3, decay: 1.7 * Math.max(1, tail / 2.52 * 0.8), rev: 0.55, len: tail, p: 0.05 });
+pluck(c0 + 0.48, hz(A4 - 12), { gain: 0.12, decay: 1.9, rev: 0.4, len: tail });
+bell(c0 + 0.48, hz(A5), { gain: 0.06, decay: 1.9, len: tail });
+bassHit(c0 + 0.48, hz(A2 - 12), { gain: 0.24, len: 1.2 });
+if (narrated) pad(c0 + 0.4, CUT.duration, [A2 + 12, E3 + 12, Cs4, E4], { gain: 0.012, fadeIn: 0.8, fadeOut: 2.2 });
 
 /* ───────────── Reverb (Schroeder: parallel combs → series all-passes) ───────────── */
 function reverb(input, combs, allpasses, fb = 0.8, damp = 0.25) {
