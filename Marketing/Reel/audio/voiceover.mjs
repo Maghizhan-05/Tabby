@@ -89,5 +89,5 @@ rmSync(raw);
 
 /* ── captions (SRT), for platforms that take a caption file ── */
 const ts = s => { const ms = Math.round(s * 1000); return `${String(Math.floor(ms / 3600000)).padStart(2, '0')}:${String(Math.floor(ms / 60000) % 60).padStart(2, '0')}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`; };
-writeFileSync(join(outDir, `${base}.srt`), cues.map((c, i) => `${i + 1}\n${ts(c.start)} --> ${ts(c.end + 0.25)}\n${c.text}\n`).join('\n'));
+writeFileSync(join(outDir, `${base}.srt`), cues.map((c, i) => `${i + 1}\n${ts(c.start)} --> ${ts(Math.min(c.end + 0.25, cues[i + 1] ? cues[i + 1].start - 0.05 : Infinity))}\n${c.text}\n`).join('\n'));
 console.log(`  voiceover → ${wav}${PLACEHOLDER ? '  (PLACEHOLDER guide track)' : ` (voice ${VOICE})`}`);
