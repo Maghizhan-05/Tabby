@@ -1,0 +1,14 @@
+{
+  "name": "tabby-launch-reel",
+  "private": true,
+  "type": "module",
+  "description": "Tabby — \"Keep a tab.\" 15 s 9:16 social launch reel, rendered from code.",
+  "scripts": {
+    "render": "node render.mjs",
+    "render:60": "node render.mjs --fps 60",
+    "audio": "node audio/sound-design.mjs out/tabby-reel-audio.wav"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}
