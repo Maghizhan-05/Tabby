@@ -38,3 +38,12 @@ Icon
 *.dSYM.zip
 *.dSYM
 DerivedDataWidget*/
+tabby-after-5s.png
+tabby-after-wait.png
+tabby-auth-fail.png
+tabby-auth-fail2.png
+tabby-current-timeout.png
+tabby-home-after-auth.png
+tabby-keyboard-fix-launch.png
+tabby-current.png
+tabby-seeded-home.png
