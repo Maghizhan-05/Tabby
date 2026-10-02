@@ -123,17 +123,19 @@ const confirm = t => {
   noiseBurst(t, { gain: 0.32, tone: 0.55, toneF: 1850, decay: 0.008, rev: 0.02, len: 0.04 });
   noiseBurst(t + 0.018, { gain: 0.2, tone: 0.7, toneF: 3700, decay: 0.006, rev: 0.02, len: 0.03 });
 };
-const narrated = !!CUT.vo;          // leave room for the voice: a quieter bed
+const narrated = !!CUT.vo;
+const entry = T.tapAdd ?? T.widgetTap;   // first tap: Add spend, or the Home Screen widget          // leave room for the voice: a quieter bed
 const bed = narrated ? 0.75 : 1;
 
 // The hook
 pluck(0.0, hz(A4), { gain: 0.34, decay: 1.4, rev: 0.45 });
 pluck(0.0, hz(A4 - 12), { gain: 0.12, decay: 1.6, rev: 0.3 });
-sweep(0.12, T.tapAdd, 260, 3600, { gain: 0.05 * bed, q: 1.1, rev: 0.5 });
+sweep(0.12, entry, 260, 3600, { gain: 0.05 * bed, q: 1.1, rev: 0.5 });
 pad(0.05, T.rowIn[0] + 0.1, [A2 + 12, E3 + 12, Cs4, B4], { gain: 0.016 * bed, fadeIn: 1.2, fadeOut: 0.6 });
 
 // The small action
-tap(T.tapAdd, 0.2, 0.16, 1700);
+tap(entry, 0.2, 0.16, 1700);
+if (T.launch) sweep(T.launch[0] - 0.02, T.launch[1], 300, 2600, { gain: 0.03, q: 1.2, rev: 0.3, shape: 'arch' });   // app opens
 rise(T.sheetIn[0] - 0.02, T.sheetIn[1]);
 T.keys.forEach(([t], i) => key(t, -0.15 + i * 0.12));
 tap(T.tapCat, 0.15);
@@ -174,6 +176,13 @@ if (T.tapFriends !== undefined) {
   fall(T.editOut[0], T.editOut[1]);
   bell(T.aggRoll[0], hz(E5), { gain: 0.07, decay: 1.6, p: 0.15 });
   bell(T.aggRoll[0] + 0.12, hz(A5), { gain: 0.06, decay: 1.8, p: -0.15 });
+}
+
+// Home Screen return: swipe whoosh, the widget has caught up
+if (T.homeOut) {
+  sweep(T.homeOut[0] - 0.1, T.homeOut[1], 2600, 400, { gain: 0.03, q: 1.2, rev: 0.3, shape: 'arch' });
+  bell(T.trace3[0], hz(Cs6), { gain: 0.045, decay: 1.5, p: 0.2 });
+  bell(T.trace3[0] + 0.1, hz(E6), { gain: 0.035, decay: 1.6, p: -0.2 });
 }
 
 // The brand close: warm two-note signature, final note resolves naturally at the end

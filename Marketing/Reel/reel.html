@@ -187,6 +187,33 @@
   .fcell { position: absolute; left: 0; width: 370px; height: 52px; padding: 0 20px; display: flex; align-items: center; font-size: 17px; }
   #oweCaret { width: 2px; height: 22px; border-radius: 1px; background: var(--accent); margin-left: 1px; }
 
+  /* Home Screen (springboard) + the Spending Analytics widget */
+  #springboard { position: absolute; inset: 0; display: none; overflow: hidden; transform-origin: 201px 437px;
+    background: radial-gradient(90% 55% at 78% 18%, rgba(230 168 56 / .30), transparent 60%),
+                radial-gradient(80% 50% at 10% 85%, rgba(171 115 245 / .16), transparent 60%),
+                linear-gradient(170deg, #15161d, #090a0e 55%, #0c0d13); }
+  #springboard::after { content: ""; position: absolute; left: 150px; top: -120px; width: 560px; height: 560px; border-radius: 50%;
+    border: 1.5px solid rgba(255 214 110 / .10); }
+  .widget { position: absolute; left: 27px; top: 70px; width: 348px; height: 163px; border-radius: 26px; background: #090a0e;
+    box-shadow: 0 0 0 1px rgba(255 255 255 / .07), 0 10px 30px rgba(0 0 0 / .45); display: flex; align-items: center; gap: 16px; padding: 14px 18px; }
+  .widget .ringBox { position: relative; width: 90px; height: 90px; flex: none; margin-left: 8px; }
+  .widget .ringBox .ctr { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .widget .ctr .t { font-size: 11px; color: rgba(255 255 255 / .58); }
+  .widget .ctr .v { font-size: 17px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+  .widget .leg { flex: 1; display: flex; flex-direction: column; gap: 4px; padding-right: 6px; }
+  .widget .leg div { display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(255 255 255 / .78); }
+  .widget .leg i { width: 7px; height: 7px; border-radius: 50%; display: block; }
+  .widget .leg b { margin-left: auto; font-weight: 500; color: #fff; font-variant-numeric: tabular-nums; }
+  .sbLabel { position: absolute; font-size: 12px; font-weight: 500; color: rgba(255 255 255 / .92); text-align: center; text-shadow: 0 1px 2px rgba(0 0 0 / .5); }
+  .appIcon { position: absolute; width: 64px; height: 64px; border-radius: 15px; overflow: hidden; display: grid; place-items: center;
+    background: linear-gradient(160deg, rgba(255 255 255 / .14), rgba(255 255 255 / .05)); box-shadow: inset 0 0 0 1px rgba(255 255 255 / .12); color: rgba(240 237 227 / .86); }
+  .appIcon img { width: 100%; height: 100%; display: block; }
+  #sbSearch { position: absolute; left: 160px; top: 742px; width: 82px; height: 28px; border-radius: 14px; background: rgba(255 255 255 / .12);
+    display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 12px; font-weight: 500; color: rgba(255 255 255 / .85); }
+  #sbDock { position: absolute; left: 12px; top: 780px; width: 378px; height: 86px; border-radius: 34px; background: rgba(255 255 255 / .10);
+    box-shadow: inset 0 0 0 1px rgba(255 255 255 / .08); }
+  #app { position: absolute; inset: 0; }
+
   /* Film treatment (screen-space, above the UI) */
   #fx { position: absolute; left: 0; top: 0; width: 402px; height: 874px; overflow: visible; pointer-events: none; }
 
@@ -224,6 +251,10 @@
   <div id="cam">
     <div id="device"></div>
     <div id="screen">
+      <!-- iPhone HOME SCREEN with the Tabby widget (story cut bookend) -->
+      <div id="springboard"></div>
+
+      <div id="app">
       <!-- HOME (HomeView inside the TabView) -->
       <div id="home">
         <div class="backdrop" id="homeBackdrop"></div>
@@ -314,6 +345,8 @@
         <div id="prows"></div>
       </div>
 
+      </div><!-- /#app -->
+
       <div id="status">
         <div class="time">1:42</div>
         <svg class="abs" style="left:300px;top:20px" width="80" height="14" viewBox="0 0 80 14">
@@ -335,6 +368,7 @@
   <div class="head" id="h2" style="top:268px"><span class="ln"><span class="w">Log</span> <span class="w">it<span class="dotp">.</span></span></span></div>
   <div class="head" id="h3" style="top:268px"><span class="ln"><span class="w">See</span> <span class="w">it<span class="dotp">.</span></span></span></div>
   <div class="head" id="h4" style="top:232px"><span class="ln"><span class="w">Know</span> <span class="w">your</span></span><span class="ln"><span class="w">spending<span class="dotp">.</span></span></span></div>
+  <div class="head" id="h6" style="top:268px"><span class="ln"><span class="w">At</span> <span class="w">a</span> <span class="w">glance<span class="dotp">.</span></span></span></div>
   <div class="head" id="h5" style="top:268px"><span class="ln"><span class="w">Settle</span> <span class="w">up<span class="dotp">.</span></span></span></div>
   <svg id="hookSvg" viewBox="0 0 1080 1920"></svg>
 
@@ -359,6 +393,7 @@ const DURATION = CUT.duration;
 const T = Object.assign({}, CUT.T);
 T.dissolve = [T.close - 0.04, T.close + 0.26];
 const HAS_FRIENDS = T.tapFriends !== undefined;
+const HAS_WIDGET = T.widgetTap !== undefined;
 
 /* ───────────────────────── Demo dataset (₹, en_IN) ─────────────────────────
    Thursday 22 Oct 2026, 1:42 pm. One consistent world across every scene. */
@@ -416,6 +451,20 @@ const ICONS = {
   search: '<svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5.2"/><path d="M11 11l4.3 4.3" stroke-linecap="round"/></svg>',
   house: '<svg width="24" height="21" viewBox="0 0 24 21" fill="currentColor"><path d="M12 1.2L1.6 10h2.9v9.4c0 .6.4 1 1 1h4.6v-6.2h3.8v6.2h4.6c.6 0 1-.4 1-1V10h2.9z"/></svg>',
   people: '<svg width="28" height="21" viewBox="0 0 28 21" fill="currentColor"><circle cx="10" cy="6" r="4.6"/><path d="M1.5 19.4c.6-4.6 4-7.4 8.5-7.4s7.9 2.8 8.5 7.4z"/><circle cx="20.5" cy="7" r="3.6"/><path d="M19.6 12.4c3.9-.4 6.5 2 7 6.2h-6.4c-.2-2.4-.9-4.3-2.3-5.9z"/></svg>',
+  gCal: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="22" height="20" rx="5"/><path d="M4 12h22M10 3v5M20 3v5" stroke-linecap="round"/></svg>',
+  gCam: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="24" height="17" rx="5"/><circle cx="15" cy="16.5" r="5"/><path d="M10 8l2-3h6l2 3"/></svg>',
+  gMusic: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 22V7l13-3v15"/><circle cx="8" cy="22" r="3.2"/><circle cx="21" cy="19" r="3.2"/></svg>',
+  gMap: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 26s8-7.5 8-13a8 8 0 0 0-16 0c0 5.5 8 13 8 13z"/><circle cx="15" cy="13" r="3"/></svg>',
+  gMail: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="7" width="22" height="16" rx="4"/><path d="M5 9l10 7 10-7"/></svg>',
+  gClock: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="15" cy="15" r="11"/><path d="M15 9v6l4 3"/></svg>',
+  gSun: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="15" cy="15" r="5"/><path d="M15 3v3M15 24v3M3 15h3M24 15h3M6.5 6.5l2 2M21.5 21.5l2 2M6.5 23.5l2-2M21.5 8.5l2-2"/></svg>',
+  gFolder: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9a2 2 0 0 1 2-2h6l3 3h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>',
+  gGear: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><circle cx="15" cy="15" r="4"/><path d="M15 3v4M15 23v4M3 15h4M23 15h4M6.5 6.5l2.8 2.8M20.7 20.7l2.8 2.8M6.5 23.5l2.8-2.8M20.7 9.3l2.8-2.8" stroke-linecap="round"/></svg>',
+  gNote: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="4" width="18" height="22" rx="4"/><path d="M10 11h10M10 16h10M10 21h6"/></svg>',
+  gBook: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 6h8a3 3 0 0 1 3 3v15a2 2 0 0 0-2-2H5zM25 6h-6a3 3 0 0 0-3 3v15a2 2 0 0 1 2-2h7z"/></svg>',
+  gPhone: '<svg width="30" height="30" viewBox="0 0 30 30" fill="currentColor"><path d="M9.5 4.5l3 4.5-2 2.6c1.3 2.9 3.4 5 6.3 6.3l2.6-2 4.5 3-1.6 4c-.4.9-1.3 1.4-2.3 1.2C11.8 22.8 7.2 18.2 5.9 10c-.2-1 .3-1.9 1.2-2.3z"/></svg>',
+  gChat: '<svg width="30" height="30" viewBox="0 0 30 30" fill="currentColor"><path d="M15 5C8.9 5 4 9 4 14c0 2.7 1.5 5.2 3.9 6.8L7 25l4.6-2.4c1.1.3 2.2.4 3.4.4 6.1 0 11-4 11-9S21.1 5 15 5z"/></svg>',
+  gGlobe: '<svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2"><circle cx="15" cy="15" r="11"/><path d="M4 15h22M15 4c3 3 4.5 7 4.5 11S18 23 15 26c-3-3-4.5-7-4.5-11S12 7 15 4z"/></svg>',
   checkCircle: '<svg width="19" height="19" viewBox="0 0 19 19"><circle cx="9.5" cy="9.5" r="9.5" fill="rgb(230 168 56)"/><path d="M5.3 9.8l2.8 2.8 5.6-6" fill="none" stroke="#000" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   del: '<svg width="27" height="20" viewBox="0 0 27 20" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><path d="M8.5 1.5h15.2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H8.5L1.6 10z"/><path d="M12.6 6.5l7 7M19.6 6.5l-7 7" stroke-linecap="round"/></svg>',
 };
@@ -454,9 +503,49 @@ function build() {
     : `<div class="k" data-k="${k}"><b>${k}</b><small>${l}</small></div>`).join('');
 
   $('islandLead').innerHTML = ICONS.checkCircle;
+  if (HAS_WIDGET) buildSpringboard();
   $('fList').innerHTML = FRIENDS.map(([n], i) => `<div class="frow" style="top:${i * 52}px" id="f${n}"><i class="hl"></i><span class="n">${n}</span>
     <span class="c" style="color:var(--accent-bright)"></span><span class="c" style="color:var(--subtle)"></span><span class="c"></span>${i < FRIENDS.length - 1 ? '<i class="sep"></i>' : ''}</div>`).join('');
   drawBars();
+}
+
+/* ───────────────────────── Home Screen ─────────────────────────
+   Generic glyph icons (no real third-party apps), the real Tabby icon, and the
+   medium "Spending Analytics" widget (AnalyticsRingsWidget, Daily mode). */
+const ICON_SRC = '../../SpendTracker/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png';
+const SB_ICONS = [['Tabby', null], ['Calendar', 'gCal'], ['Camera', 'gCam'], ['Music', 'gMusic'],
+  ['Maps', 'gMap'], ['Mail', 'gMail'], ['Clock', 'gClock'], ['Weather', 'gSun'],
+  ['Files', 'gFolder'], ['Notes', 'gNote'], ['Books', 'gBook'], ['Settings', 'gGear']];
+const SB_COL = [27, 121.7, 216.3, 311], SB_ROW = [272, 370, 468];
+const TABBY_ICON = { x: SB_COL[0], y: SB_ROW[0], w: 64, h: 64 };
+const WIDGET_RECT = { x: 27, y: 70, w: 348, h: 163 };
+// Widget ring palette (AnalyticsRingsWidget.ringPalette) — differs from the in-app chart palette.
+const WRING = ['rgb(255 214 110)', 'rgb(230 168 56)', 'rgb(247 128 51)', 'rgb(171 115 245)', 'rgb(64 179 184)', 'rgb(245 87 117)'];
+function buildSpringboard() {
+  let h = `<div class="widget" id="widget"><div class="ringBox"><svg width="90" height="90" viewBox="0 0 90 90" id="wRing"></svg>
+    <div class="ctr"><span class="t">Today</span><span class="v" id="wTotal"></span></div></div><div class="leg" id="wLeg"></div></div>
+    <div class="sbLabel" style="left:27px;width:348px;top:240px">Tabby</div>`;
+  SB_ICONS.forEach(([name, g], i) => {
+    const x = SB_COL[i % 4], y = SB_ROW[Math.floor(i / 4)];
+    h += `<div class="appIcon" style="left:${x}px;top:${y}px">${g ? ICONS[g] : `<img src="${ICON_SRC}" alt="">`}</div>
+      <div class="sbLabel" style="left:${x - 12}px;width:88px;top:${y + 70}px">${name}</div>`;
+  });
+  h += `<div id="sbSearch">${ICONS.search.replace('width="17" height="17"', 'width="12" height="12"')}Search</div><div id="sbDock"></div>`;
+  ['gPhone', 'gChat', 'gGlobe', 'gMusic'].forEach((g, i) => { h += `<div class="appIcon" style="left:${SB_COL[i]}px;top:791px">${ICONS[g]}</div>`; });
+  $('springboard').innerHTML = h;
+}
+function drawWidget(totals) {
+  const sum = totals.reduce((a, [, v]) => a + v, 0), r = 39, C = 2 * Math.PI * r;
+  let start = 0, g = '';
+  totals.forEach(([, v], i) => {
+    const f = v / sum;
+    g += `<circle cx="45" cy="45" r="${r}" fill="none" stroke="${WRING[i]}" stroke-width="12" stroke-dasharray="${f * C} ${C}"
+      stroke-dashoffset="${-start * C}" transform="rotate(-90 45 45)"/>`;
+    start += f;
+  });
+  $('wRing').innerHTML = g;
+  $('wTotal').textContent = wfmt(sum);
+  $('wLeg').innerHTML = totals.slice(0, 4).map(([c, v], i) => `<div><i style="background:${WRING[i]}"></i>${c}<b>${wfmt(v)}</b></div>`).join('');
 }
 
 /* ───────────────────────── Charts ───────────────────────── */
@@ -524,6 +613,7 @@ const TOUCHES = [
   { t: T.tapFoodSeg, x: 255, y: 328, r: 15 },
   { t: T.tapMonthly, x: 213, y: 158, r: 15 },
 ];
+if (HAS_WIDGET) TOUCHES.push({ t: T.widgetTap, x: 201, y: 153, r: 24 });
 if (HAS_FRIENDS) TOUCHES.push(
   { t: T.tapFriends, x: 252, y: 825, r: 19 },
   { t: T.tapArjun, x: 120, y: 218, r: 18 },
@@ -535,6 +625,7 @@ if (HAS_FRIENDS) TOUCHES.push(
 function touchMarkup(t, s) {
   let g = '';
   for (const k of TOUCHES) {
+    if (!Number.isFinite(k.t)) continue;
     const d = t - k.t;
     if (d < -0.16 || d > 0.55) continue;
     const lw = 2.6 / s * 1.6, gold = 'rgb(255 214 110)';
@@ -566,7 +657,7 @@ function headline(el, t, tin, tout) {
 }
 
 /* ───────────────────────── Hook arc (stage space) ───────────────────────── */
-const hookPath = 'M 868 302 C 960 300, 1004 420, 1000 640 C 996 900, 984 1150, 926 1340 C 892 1450, 852 1520, 812 1556';
+const HOOK_DEFAULT = 'M 868 302 C 960 300, 1004 420, 1000 640 C 996 900, 984 1150, 926 1340 C 892 1450, 852 1520, 812 1556';
 function hook(t) {
   const svg = $('hookSvg');
   const draw = P(t, CUT.hook.draw, E.inOutCubic), fade = 1 - P(t, CUT.hook.fade, E.outCubic);
@@ -574,7 +665,7 @@ function hook(t) {
   if (!svg.firstChild) {
     svg.innerHTML = `<defs><linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(230 168 56 / .15)"/><stop offset=".6" stop-color="rgb(230 168 56)"/><stop offset="1" stop-color="rgb(255 214 110)"/></linearGradient>
       <filter id="hglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9"/></filter></defs>
-      <path id="hookP" d="${hookPath}" fill="none" stroke="url(#hg)" stroke-width="3.2" stroke-linecap="round"/>
+      <path id="hookP" d="${CUT.hook.path || HOOK_DEFAULT}" fill="none" stroke="url(#hg)" stroke-width="3.2" stroke-linecap="round"/>
       <circle id="hookHalo" r="22" fill="rgba(255 214 110 / .55)" filter="url(#hglow)"/><circle id="hookDot" r="9" fill="rgb(255 214 110)"/>`;
   }
   const p = $('hookP'), L = p.getTotalLength();
@@ -683,6 +774,34 @@ function friends(t) {
   return p;
 }
 
+/* Home Screen bookend: the widget before launch, the app zooming out of it,
+   and the swipe home into the Tabby icon. Clips #app to a rounded rect. */
+function springboard(t) {
+  const app = $('app');
+  if (!HAS_WIDGET) return;
+  const lP = P(t, T.launch, E.inOutCubic), hP = P(t, T.homeOut, E.inOutCubic);
+  const onHome = t < T.launch[0] || t >= T.homeOut[1];
+  const sbVisible = t < T.launch[1] || t >= T.homeOut[0];
+  $('springboard').style.display = sbVisible ? 'block' : 'none';
+  if (sbVisible) {
+    drawWidget(t < T.homeOut[0] ? TODAY_BEFORE : TODAY_AFTER);
+    // The Home Screen recedes as the app opens, settles back as it closes.
+    const k = t < T.homeOut[0] ? lP : 1 - hP;
+    css($('springboard'), { transform: `scale(${lerp(1, 1.08, k)})`, filter: `blur(${k * 6}px)`, opacity: String(1 - k * 0.6) });
+    $('widget').style.transform = `scale(${1 - clamp(1 - Math.abs(t - T.widgetTap - 0.05) / 0.12) * 0.035})`;
+  }
+  app.style.display = onHome ? 'none' : 'block';
+  if (onHome) return;
+  const full = { x: 0, y: 0, w: 402, h: 874 };
+  let from, p;
+  if (t < T.launch[1]) { from = WIDGET_RECT; p = lP; } else if (t >= T.homeOut[0]) { from = TABBY_ICON; p = 1 - hP; } else { from = full; p = 1; }
+  const x = lerp(from.x, 0, p), y = lerp(from.y, 0, p), w = lerp(from.w, 402, p), h = lerp(from.h, 874, p), r = lerp(from === TABBY_ICON ? 15 : 26, 56, p);
+  // iOS scales the whole app into/out of the source rect (uniform scale, top-aligned clip).
+  const sx = w / 402;
+  css(app, { transformOrigin: '0 0', transform: p >= 1 ? '' : `translate(${x}px, ${y}px) scale(${sx})`,
+    clipPath: p >= 1 ? '' : `inset(0 0 ${Math.max(0, 874 - h / sx)}px 0 round ${r / sx}px)`, opacity: String(clamp(p * 3)) });
+}
+
 /* ───────────────────────── Frame ───────────────────────── */
 function renderFrame(t, plate) {
   t = clamp(t, 0, DURATION);
@@ -703,6 +822,8 @@ function renderFrame(t, plate) {
   // TabbyBackdrop glow drift (7 s ease-in-out autoreverse)
   const drift = (Math.sin((t / 7) * Math.PI - Math.PI / 2) + 1) / 2;
   $('homeBackdrop').style.setProperty('--gx', `${lerp(-360, 402 - 360, drift)}px`);
+
+  springboard(t);
 
   /* Sheet presentation */
   const sIn = P(t, T.sheetIn, E.spring), sOut = P(t, T.sheetOut, E.inOutCubic);
@@ -823,6 +944,15 @@ function renderFrame(t, plate) {
 
   /* Film treatment in screen space: touch rings + the traced new row */
   let fx = touchMarkup(t, c.s) + traceRow(t, c, T.trace, T.traceOut, 11, 525, 380, 60);
+  if (HAS_WIDGET) {
+    fx += traceRow(t, c, T.trace3, T.traceOut3, 22, 65, 358, 173, 30);
+    // Swipe up from the home indicator: a gold touch travelling upward.
+    const sw = (t - T.homeOut[0] + 0.12) / 0.42;
+    if (sw > 0 && sw < 1) {
+      const y = lerp(864, 640, E.outCubic(sw)), k = 1.5 / c.s;
+      fx += `<circle cx="201" cy="${y}" r="${16}" fill="rgba(255 214 110 / .22)" stroke="rgb(255 214 110)" stroke-width="${2.6 * k}" opacity="${Math.sin(Math.PI * sw)}"/>`;
+    }
+  }
   if (HAS_FRIENDS) fx += traceRow(t, c, T.trace2, T.traceOut2, 12, 190, 378, 56);
   $('fx').innerHTML = fx;
 

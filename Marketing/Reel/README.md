@@ -51,19 +51,25 @@ opens at a given second. Add `?cut=story30` for the story cut. Preview timing fo
 Every beat time lives in the cut's `T` object in `cuts.js`; camera moves are in its `cam`.
 Touch points (`TOUCHES` in `reel.html`) are in screen points.
 
-## Story cut (`story30`): narrated, with Friends
+## Story cut (`story30`): narrated, with the widget and Friends
 
-Second-person narration: the viewer is the hero. Headlines stay one message per scene, so
-the film still reads with sound off.
+Second-person narration: the viewer is the hero. The cut is bookended on the iPhone Home
+Screen with Tabby's **Spending Analytics** widget (medium, Daily mode). Headlines stay one
+message per scene, so the film still reads with sound off.
 
 | Time | Scene | On screen | Narration |
 |---|---|---|---|
-| 0.0–2.6 | Hook | Home settles; **Keep a tab.**; gold arc to Add spend | *Every rupee tells a story.* |
-| 2.6–7.7 | Log it | Add spend → type 180 → Food → **Lock it in** (6.95) | *One forty-two. Lunch, a hundred and eighty rupees.* · *One tap, and it's on your tab.* |
-| 7.7–11.5 | See it | Live Activity, new row, Today ₹215 → ₹395, gold trace | *There it is. Your day, adding up.* |
-| 11.5–17.5 | Know your spending | Donut → Food ₹180.00 · 46% → Monthly ₹15,650.00 → pull back | *Tap the ring. See where it went.* · *Zoom out, and your month comes into focus.* |
-| 17.5–24.6 | **Settle up.** | Tap **Friends** tab → ledger → tap Arjun → Edit Friend: They owe you 650 → 1250 → **Save** → row and aggregate net update, gold trace | *And that dinner you covered on Friday?* · *Tabby remembers who owes you, so friendships stay simple.* |
-| 24.6–30.0 | Brand close | Orbit, coin icon, Tabby, tagline, **Coming to the App Store** (settled by 25.2) | *Tabby.* · *Keep a tab on your spending. Coming to the App Store.* |
+| 0.0–2.3 | Hook | Home Screen; widget shows **Today ₹215**; **Keep a tab.**; gold arc to the widget | *Every rupee tells a story.* |
+| 2.3–7.2 | Log it | Tap the widget → app opens out of it straight into quick entry (the widget's `spendtracker://quick-entry` link) → type 180 → Food → **Lock it in** (6.55) | *One forty-two. Lunch, a hundred and eighty rupees.* · *One tap, and it's on your tab.* |
+| 7.2–9.9 | See it | Live Activity, new row, Today ₹215 → ₹395, gold trace | *There it is. Your day, adding up.* |
+| 9.9–14.7 | Know your spending | Donut → Food ₹180.00 · 46% → Monthly ₹15,650.00 → pull back | *Tap the ring. See where it went.* · *Zoom out, and your month comes into focus.* |
+| 14.7–20.8 | **Settle up.** | Friends tab → ledger → Arjun → Edit Friend: They owe you 650 → 1250 → **Save** → row and aggregate net update, gold trace | *And that dinner you covered on Friday?* · *Tabby remembers who owes you, so friendships stay simple.* |
+| 20.8–24.0 | **At a glance.** | Swipe home; the app shrinks into its icon; widget now **Today ₹395**, Food in gold; gold trace; push in | *And your day stays in sight, right on your Home Screen.* |
+| 24.0–30.0 | Brand close | Orbit, coin icon, Tabby, tagline, **Coming to the App Store** (settled by 24.6) | *Tabby.* · *Keep a tab on your spending. Coming to the App Store.* |
+
+The Home Screen's other icons are generic glyphs, so the frame doesn't imitate any
+third-party app. Only the real Tabby icon and widget appear. The widget uses its own ring
+palette (`AnalyticsRingsWidget.ringPalette`) and `WidgetCurrencyFormatter` amounts (₹215, ₹395).
 
 ### Friends data
 
