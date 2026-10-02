@@ -1,6 +1,11 @@
 # Tabby launch reel: "Keep a tab."
 
-15 s · 9:16 · 1080 × 1920 · 30 fps · H.264 + AAC (48 kHz stereo, −16 LUFS)
+9:16 · 1080 × 1920 · 30 fps · H.264 + AAC (48 kHz stereo, −16 LUFS)
+
+| Cut | Length | What it is |
+|---|---|---|
+| `launch15` | 15 s | Silent-first launch reel: log → see → know → brand close |
+| `story30` | 30 s | Narrated story cut: the same flow at a storytelling pace, plus the **Friends** ledger |
 
 A code-driven social launch film. Every frame is a pure function of time, so a
 render is frame-exact and repeatable. Retiming a beat is a one-line edit.
@@ -8,8 +13,10 @@ render is frame-exact and repeatable. Retiming a beat is a one-line edit.
 ```
 Marketing/Reel/
 ├── reel.html                 the stage: rebuilt Tabby screens, camera, typography, film treatment
-├── render.mjs                Playwright → PNG frames → ffmpeg (video + audio mux)
-├── audio/sound-design.mjs    synthesized SFX + music bed, timed to the same timeline
+├── cuts.js                   every cut's timeline: beats, camera, headlines, narration script
+├── render.mjs                Playwright → PNG frames → ffmpeg (video + audio mux, voice ducking)
+├── audio/sound-design.mjs    synthesized SFX + music bed, cued from the cut's timeline
+├── audio/voiceover.mjs       narration with Kokoro-82M (kokoro-js) + SRT captions
 ├── fonts/                    Nunito (SF Rounded stand-in) + Inter (SF Pro stand-in), SIL OFL 1.1
 └── out/                      renders (git-ignored)
 ```
@@ -20,6 +27,7 @@ Marketing/Reel/
 cd Marketing/Reel
 npm install && npx playwright install chromium   # once
 node render.mjs                                  # → out/tabby-reel.mp4 + out/tabby-reel-poster.png
+node render.mjs --cut story30                    # → out/tabby-reel-story30.mp4 (generates the voice on first run)
 node render.mjs --fps 60                         # 60 fps master
 node render.mjs --stills 0.6,4.5,9.2             # review frames → out/still-*.png
 node render.mjs --no-audio                       # silent version
@@ -28,9 +36,9 @@ node render.mjs --no-audio                       # silent version
 You need Node 18+ and ffmpeg (`brew install ffmpeg`). A full render takes about 2–3 minutes.
 
 **Preview:** open `reel.html` in Chrome. It loops with a scrubber, and `reel.html?t=8.4`
-opens at a given second. Preview timing follows the wall clock; renders are frame-exact.
+opens at a given second. Add `?cut=story30` for the story cut. Preview timing follows the wall clock; renders are frame-exact.
 
-## Screenplay → timeline
+## Screenplay → timeline (`launch15`)
 
 | Time | Beat | On screen | Sound |
 |---|---|---|---|
@@ -40,8 +48,58 @@ opens at a given second. Preview timing follows the wall clock; renders are fram
 | 8.00–12.00 | **The bigger picture** | Push to the Daily donut; touch on Food → callout *Food ₹180.00 · 46%*; tap **Monthly** → *This Month ₹15,650.00* + gold weekly bars; pull back to the full analytics panel; **Know your spending.** | two rhythmic accents, light tonal lift |
 | 12.00–15.00 | **The brand close** | Product dissolves to near-black; gold orbit draws; real gold-coin app icon scales in; **Tabby** / *Keep a tab on your spending.* / **Coming to the App Store**. Settled by 12.6 s and held | two-note signature E5 → A5, rings out to 15 s |
 
-Every beat time lives in the `T` object at the top of the script in `reel.html`. Camera moves
-are in `CAM`, and touch points in `TOUCHES`, which use screen points.
+Every beat time lives in the cut's `T` object in `cuts.js`; camera moves are in its `cam`.
+Touch points (`TOUCHES` in `reel.html`) are in screen points.
+
+## Story cut (`story30`): narrated, with Friends
+
+Second-person narration: the viewer is the hero. Headlines stay one message per scene, so
+the film still reads with sound off.
+
+| Time | Scene | On screen | Narration |
+|---|---|---|---|
+| 0.0–2.6 | Hook | Home settles; **Keep a tab.**; gold arc to Add spend | *Every rupee tells a story.* |
+| 2.6–7.7 | Log it | Add spend → type 180 → Food → **Lock it in** (6.95) | *One forty-two. Lunch, a hundred and eighty rupees.* · *One tap, and it's on your tab.* |
+| 7.7–11.5 | See it | Live Activity, new row, Today ₹215 → ₹395, gold trace | *There it is. Your day, adding up.* |
+| 11.5–17.5 | Know your spending | Donut → Food ₹180.00 · 46% → Monthly ₹15,650.00 → pull back | *Tap the ring. See where it went.* · *Zoom out, and your month comes into focus.* |
+| 17.5–24.6 | **Settle up.** | Tap **Friends** tab → ledger → tap Arjun → Edit Friend: They owe you 650 → 1250 → **Save** → row and aggregate net update, gold trace | *And that dinner you covered on Friday?* · *Tabby remembers who owes you, so friendships stay simple.* |
+| 24.6–30.0 | Brand close | Orbit, coin icon, Tabby, tagline, **Coming to the App Store** (settled by 25.2) | *Tabby.* · *Keep a tab on your spending. Coming to the App Store.* |
+
+### Friends data
+
+The ledger is sorted by name, as the app's `@Query` does. Amounts use the app's
+`WidgetCurrencyFormatter` format (₹, en_IN grouping):
+
+| Friend | They owe | You owe | Net |
+|---|---|---|---|
+| Arjun | ₹650 → **₹1,250** | ₹0 | ₹650 → **₹1,250** |
+| Kabir | ₹0 | ₹400 | −₹400 (red) |
+| Meera | ₹1,200 | ₹300 | ₹900 |
+| Priya | ₹250 | ₹250 | ₹0 |
+
+**Aggregate net:** ₹1,150 → **₹1,750**.
+
+### The voice
+
+`audio/voiceover.mjs` speaks the `vo` lines in `cuts.js` with Kokoro-82M (Apache-2.0). The
+default voice is `af_heart`, a warm female US-English voice. To try another:
+
+```bash
+node audio/voiceover.mjs --voice bf_emma         # or af_bella, bm_george, am_michael, bm_fable …
+node render.mjs --cut story30                    # re-render with it
+```
+
+- **Fitting:** each line starts at its `at` time and is fitted before the next line, re-spoken
+  up to 1.25× faster if needed. The script prints a fit report.
+- **Ducking:** the music bed ducks under the voice through a sidechain compressor.
+- **Captions:** `out/vo-story30.srt` is written alongside the voice, for platforms that accept
+  a caption file.
+- **Downloads:** voice files ship inside `kokoro-js`. The model (~90 MB) and tokenizer download
+  once from `huggingface.co` and its CDN `*.hf.co`.
+
+**Human voiceover:** record the script, aligned to the start times above, and pass it with
+`node render.mjs --cut story30 --vo my-voice.wav`. Use `--placeholder` on `voiceover.mjs` to
+get a timing-guide track to record against.
 
 ## Demo dataset (₹, en_IN), consistent throughout
 
