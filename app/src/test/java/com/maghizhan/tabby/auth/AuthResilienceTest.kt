@@ -53,7 +53,7 @@ class AuthResilienceTest {
         override suspend fun currentSession(): AuthSession? = throw error
         override suspend fun signInEmail(email: String, password: String) = error("unused")
         override suspend fun signUpEmail(email: String, password: String) = error("unused")
-        override suspend fun signInWithGoogle() = error("unused")
+        override suspend fun beginGoogleSignIn() = Unit
         override suspend fun completeOAuth(callbackUrl: String) = error("unused")
         override suspend fun signOut() = Unit
     }
@@ -99,7 +99,7 @@ class AuthResilienceTest {
         }
 
         override suspend fun signUpEmail(email: String, password: String) = error("unused")
-        override suspend fun signInWithGoogle() = error("unused")
+        override suspend fun beginGoogleSignIn() = Unit
         override suspend fun completeOAuth(callbackUrl: String) = error("unused")
 
         override suspend fun signOut() {
@@ -144,7 +144,7 @@ class AuthResilienceTest {
             override suspend fun currentSession() = session
             override suspend fun signInEmail(email: String, password: String) = error("unused")
             override suspend fun signUpEmail(email: String, password: String) = error("unused")
-            override suspend fun signInWithGoogle() = error("unused")
+            override suspend fun beginGoogleSignIn() = Unit
             override suspend fun completeOAuth(callbackUrl: String) = error("unused")
             override suspend fun signOut() = throw IllegalStateException("network down")
         }
@@ -168,7 +168,7 @@ class AuthResilienceTest {
             override suspend fun signInEmail(email: String, password: String): AuthSession =
                 throw IllegalStateException("bad credentials")
             override suspend fun signUpEmail(email: String, password: String) = error("unused")
-            override suspend fun signInWithGoogle() = error("unused")
+            override suspend fun beginGoogleSignIn() = Unit
             override suspend fun completeOAuth(callbackUrl: String) = error("unused")
             override suspend fun signOut() = Unit
         }
@@ -188,5 +188,178 @@ class AuthResilienceTest {
             "a failed sign-in must not sign the user out",
             viewModel.uiState.value is AuthUiState.SignedOut
         )
+    }
+    /**
+     * The ordering bug Reviewer caught: comparing against the latest *committed*
+     * intent lets an older sign-in land while a newer sign-out is still
+     * in flight. The sign-out here never completes, so it has committed
+     * nothing — and the sign-in must STILL be discarded, because the user's
+     * most recent expressed intent was to sign out.
+     */
+    @Test
+    fun `a sign-in does not commit while a newer sign-out is still pending`() =
+        runTest(dispatcher) {
+            val gate = CompletableDeferred<Unit>()
+            val signInStarted = CompletableDeferred<Unit>()
+
+            val service = object : AuthServicing {
+                override val isSupabaseConfigured = true
+                override val isGoogleProviderConfigured = true
+                override suspend fun currentSession(): AuthSession? = null
+                override suspend fun signInEmail(email: String, password: String): AuthSession {
+                    signInStarted.complete(Unit)
+                    gate.await()
+                    return session
+                }
+                override suspend fun signUpEmail(email: String, password: String) = error("unused")
+                override suspend fun beginGoogleSignIn() = Unit
+                override suspend fun completeOAuth(callbackUrl: String) = error("unused")
+                override suspend fun signOut() {
+                    // Never returns: the sign-out stays pending forever.
+                    CompletableDeferred<Unit>().await()
+                }
+            }
+
+            val viewModel = AuthViewModel(service)
+            viewModel.restoreJob.join()
+
+            val signIn = launch { viewModel.signInEmail("me@example.com", "pw") }
+            signInStarted.await()
+
+            // Starts (claiming a newer intent) but never completes.
+            val signOut = launch { viewModel.signOut() }
+            advanceUntilIdle()
+
+            gate.complete(Unit)
+            signIn.join()
+            advanceUntilIdle()
+
+            assertFalse(
+                "an older sign-in committed while a newer sign-out was pending",
+                viewModel.uiState.value is AuthUiState.Authenticated
+            )
+            signOut.cancel()
+        }
+
+    /**
+     * Same rule, but the newer intent FAILED rather than hanging. A failed
+     * sign-out still expressed the user's intent to sign out, so the older
+     * sign-in must not be applied after it.
+     */
+    @Test
+    fun `a sign-in does not commit after a newer sign-in has already failed`() =
+        runTest(dispatcher) {
+            val firstStarted = CompletableDeferred<Unit>()
+            val firstGate = CompletableDeferred<Unit>()
+            var call = 0
+
+            val service = object : AuthServicing {
+                override val isSupabaseConfigured = true
+                override val isGoogleProviderConfigured = true
+                override suspend fun currentSession(): AuthSession? = null
+                override suspend fun signInEmail(email: String, password: String): AuthSession {
+                    return when (++call) {
+                        1 -> {
+                            firstStarted.complete(Unit)
+                            firstGate.await()
+                            session
+                        }
+                        else -> throw IllegalStateException("bad credentials")
+                    }
+                }
+                override suspend fun signUpEmail(email: String, password: String) = error("unused")
+                override suspend fun beginGoogleSignIn() = Unit
+                override suspend fun completeOAuth(callbackUrl: String) = error("unused")
+                override suspend fun signOut() = Unit
+            }
+
+            val viewModel = AuthViewModel(service)
+            viewModel.restoreJob.join()
+
+            val slow = launch { viewModel.signInEmail("me@example.com", "pw") }
+            firstStarted.await()
+
+            // A newer attempt starts and fails.
+            runCatching { viewModel.signInEmail("me@example.com", "wrong") }
+            advanceUntilIdle()
+
+            firstGate.complete(Unit)
+            slow.join()
+            advanceUntilIdle()
+
+            assertFalse(
+                "a superseded sign-in committed after a newer attempt had failed",
+                viewModel.uiState.value is AuthUiState.Authenticated
+            )
+        }
+
+    /**
+     * Cancellation must propagate, not be folded into a state.
+     *
+     * Swallowing CancellationException detaches the coroutine from its scope:
+     * the ViewModel can be cleared while the auth call keeps running, which
+     * breaks structured concurrency rather than merely being untidy.
+     */
+    @Test
+    fun `a cancelled restore propagates cancellation instead of resolving`() =
+        runTest(dispatcher) {
+            val started = CompletableDeferred<Unit>()
+            val service = object : AuthServicing {
+                override val isSupabaseConfigured = true
+                override val isGoogleProviderConfigured = true
+                override suspend fun currentSession(): AuthSession? {
+                    started.complete(Unit)
+                    CompletableDeferred<Unit>().await()
+                    return null
+                }
+                override suspend fun signInEmail(email: String, password: String) = error("unused")
+                override suspend fun signUpEmail(email: String, password: String) = error("unused")
+                override suspend fun beginGoogleSignIn() = Unit
+                override suspend fun completeOAuth(callbackUrl: String) = error("unused")
+                override suspend fun signOut() = Unit
+            }
+
+            val viewModel = AuthViewModel(service)
+            started.await()
+            viewModel.restoreJob.cancel()
+            viewModel.restoreJob.join()
+
+            assertTrue("a cancelled restore must not be converted to a state", viewModel.restoreJob.isCancelled)
+            assertTrue(viewModel.uiState.value is AuthUiState.Restoring)
+        }
+
+    /**
+     * Launching the Google consent page is NOT authentication: the library call
+     * returns as soon as the browser opens. Claiming a session there reported
+     * "no session" on a first-ever login, so the router must stay put until the
+     * callback arrives.
+     */
+    @Test
+    fun `beginning Google sign-in does not change the router state`() = runTest(dispatcher) {
+        var launched = false
+        val service = object : AuthServicing {
+            override val isSupabaseConfigured = true
+            override val isGoogleProviderConfigured = true
+            override suspend fun currentSession(): AuthSession? = null
+            override suspend fun signInEmail(email: String, password: String) = error("unused")
+            override suspend fun signUpEmail(email: String, password: String) = error("unused")
+            override suspend fun beginGoogleSignIn() { launched = true }
+            override suspend fun completeOAuth(callbackUrl: String) = session
+            override suspend fun signOut() = Unit
+        }
+
+        val viewModel = AuthViewModel(service)
+        viewModel.restoreJob.join()
+
+        viewModel.beginGoogleSignIn()
+        assertTrue("the consent page must actually be opened", launched)
+        assertTrue(
+            "launching OAuth must not claim authentication",
+            viewModel.uiState.value is AuthUiState.SignedOut
+        )
+
+        // The callback is what authenticates.
+        viewModel.handleOAuthCallback("com.maghizhan.tabby://auth-callback?code=abc")
+        assertTrue(viewModel.uiState.value is AuthUiState.Authenticated)
     }
 }

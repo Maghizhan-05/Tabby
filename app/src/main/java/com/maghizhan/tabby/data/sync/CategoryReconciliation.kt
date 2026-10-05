@@ -11,6 +11,11 @@ import java.util.UUID
  * defaults exist independently on every device with `ownerId == null`, and they
  * must never be pushed, pulled, or deleted by absence. Only custom categories —
  * the ones a user creates — participate in sync.
+ *
+ * Ordering and conflict policy are otherwise identical to
+ * [ExpenseReconciliation]: reconcile a complete pull BEFORE pushing, a pending
+ * local edit wins while the remote row is still PRESENT, and a remote DELETION
+ * outranks a dirty local edit once the row is gone remotely.
  */
 object CategoryReconciliation {
 
@@ -92,10 +97,18 @@ object CategoryReconciliation {
             }
         }
 
-        for (record in localForOwner) {
-            if (remoteById.containsKey(record.id)) continue
-            if (record.syncState != SyncState.SYNCED && !record.hasRemoteIdentity) continue
-            deletions += record.id
+        // ...and only when the snapshot PROVED itself complete. An unproven
+        // snapshot (count missing, count moved mid-fetch, page ceiling) may be
+        // merged from but must never authorise a deletion: a row skipped by a
+        // shifting offset window is indistinguishable from a row deleted
+        // elsewhere, so deleting here would destroy live data on a transient
+        // race. Skipping deletions this cycle self-corrects on the next one.
+        if (remote.authorizesAbsenceDeletion) {
+            for (record in localForOwner) {
+                if (remoteById.containsKey(record.id)) continue
+                if (record.syncState != SyncState.SYNCED && !record.hasRemoteIdentity) continue
+                deletions += record.id
+            }
         }
 
         return Plan(

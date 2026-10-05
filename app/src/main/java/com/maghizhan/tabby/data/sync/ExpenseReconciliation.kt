@@ -41,18 +41,25 @@ object ExpenseReconciliation {
     /**
      * Builds the merge plan.
      *
-     * Rules:
+     * Conflict policy (matches the iOS `SyncEngine`, and deliberately explicit
+     * because the two halves can look contradictory):
+     *
      * - Remote row absent locally -> insert, SYNCED.
      * - Local SYNCED and the remote row is strictly newer -> overwrite from remote.
-     * - Local DIRTY / LOCAL / DELETED -> the remote row is ignored this cycle;
-     *   the pending local change wins and the next push propagates it
-     *   (documented last-writer-wins, never a silent drop).
-     * - A local row absent from the snapshot is deleted **iff it was previously
-     *   uploaded** — i.e. SYNCED, or any state carrying a remote identity. This
-     *   is what stops a row deleted on another device from being re-uploaded and
-     *   resurrected forever.
-     * - A LOCAL row (or any row that never reached the backend) is NEVER deleted
-     *   by absence: it has not been pushed yet.
+     * - Local DIRTY / LOCAL / DELETED and the remote row is still PRESENT -> the
+     *   remote row is ignored this cycle; the pending local change wins and the
+     *   next push propagates it.
+     * - **A remote DELETION outranks a pending local edit.** A local row absent
+     *   from a complete snapshot is deleted iff the backend had previously seen
+     *   it — SYNCED, or any state carrying a remote identity, *including DIRTY*.
+     *   This is the asymmetry worth stating plainly: while the remote row still
+     *   exists a dirty local edit wins, but once the row is gone remotely the
+     *   deletion wins and the local edit is dropped. Keeping the edit instead
+     *   would re-upload a record another device deleted, and the next snapshot
+     *   would "confirm" it forever — the resurrection bug the iOS engine was
+     *   fixed for.
+     * - A row that NEVER reached the backend (LOCAL with no remote identity) is
+     *   never deleted by absence: absence tells us nothing about it.
      * - Rows belonging to another account (or a remote row whose `user_id` isn't
      *   the active owner) are ignored entirely in both directions.
      */
@@ -98,10 +105,18 @@ object ExpenseReconciliation {
         // Absence means "deleted elsewhere" only for a row the backend has
         // actually seen. A SYNCED row is uploaded by definition; a DIRTY or
         // DELETED row counts once it carries a remote identity.
-        for (record in localForOwner) {
-            if (remoteById.containsKey(record.id)) continue
-            if (record.syncState != SyncState.SYNCED && !record.hasRemoteIdentity) continue
-            deletions += record.id
+        // ...and only when the snapshot PROVED itself complete. An unproven
+        // snapshot (count missing, count moved mid-fetch, page ceiling) may be
+        // merged from but must never authorise a deletion: a row skipped by a
+        // shifting offset window is indistinguishable from a row deleted
+        // elsewhere, so deleting here would destroy live data on a transient
+        // race. Skipping deletions this cycle self-corrects on the next one.
+        if (remote.authorizesAbsenceDeletion) {
+            for (record in localForOwner) {
+                if (remoteById.containsKey(record.id)) continue
+                if (record.syncState != SyncState.SYNCED && !record.hasRemoteIdentity) continue
+                deletions += record.id
+            }
         }
 
         return Plan(

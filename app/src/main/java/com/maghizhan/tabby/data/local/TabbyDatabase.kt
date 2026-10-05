@@ -26,7 +26,7 @@ import com.maghizhan.tabby.data.local.entity.UserProfileEntity
         FriendEntity::class,
         UserProfileEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -49,7 +49,16 @@ abstract class TabbyDatabase : RoomDatabase() {
                     context.applicationContext,
                     TabbyDatabase::class.java,
                     NAME
-                ).build().also { instance = it }
+                )
+                    // Explicit migrations, and deliberately NO
+                    // fallbackToDestructiveMigration: this database holds the
+                    // user's financial records, and rows that have not been
+                    // pushed yet exist nowhere else. A missing migration must
+                    // fail loudly in development rather than quietly wipe data
+                    // on a user's device.
+                    .addMigrations(MIGRATION_1_2)
+                    .build()
+                    .also { instance = it }
             }
     }
 }

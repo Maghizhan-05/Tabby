@@ -68,8 +68,7 @@ class AuthRouterTest {
         override suspend fun signUpEmail(email: String, password: String): AuthSession =
             interactiveSession ?: throw AuthError.NotConfigured
 
-        override suspend fun signInWithGoogle(): AuthSession =
-            interactiveSession ?: throw AuthError.ProviderUnavailable("Google")
+        override suspend fun beginGoogleSignIn() = Unit
 
         override suspend fun completeOAuth(callbackUrl: String): AuthSession =
             interactiveSession ?: throw AuthError.NotConfigured

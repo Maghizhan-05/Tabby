@@ -3,6 +3,7 @@ package com.maghizhan.tabby.data.remote
 import com.maghizhan.tabby.BuildConfig
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.Auth
+import io.github.jan.supabase.auth.FlowType
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
@@ -31,6 +32,15 @@ object SupabaseClientProvider {
                 // what the three-state router waits for on launch.
                 alwaysAutoRefresh = true
                 autoLoadFromStorage = true
+
+                // PKCE rather than the implicit flow: the code arrives at our
+                // custom-scheme callback and is exchanged for a session with a
+                // verifier the SDK holds, so an intercepted redirect is not
+                // enough to obtain tokens. The scheme/host must match the
+                // manifest's callback intent filter exactly.
+                flowType = FlowType.PKCE
+                scheme = OAuthCallback.SCHEME
+                host = OAuthCallback.HOST
             }
             install(Postgrest)
         }

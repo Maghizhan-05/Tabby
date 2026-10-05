@@ -291,8 +291,24 @@ class ExpenseReconciliationTest {
 
 
 /**
- * Test-only helper: builds a snapshot the test author asserts is complete.
- * Production code can only obtain one by paging to termination.
+ * Test-only helper: a snapshot the test author asserts is complete, so absence
+ * deletion is authorised. Production code can only obtain one of these from a
+ * fetch whose exact server-side count matched the rows received.
+ *
+ * The owner is irrelevant to [plan] itself — the snapshot's owner binding is
+ * enforced by the sync coordinator via `requireOwner` — so a fixed value is
+ * used here and the owner-filtering rules are driven by `activeOwnerId`.
  */
 private fun snapshot(vararg rows: RemoteExpenseRow): CompleteSnapshot<RemoteExpenseRow> =
-    CompleteSnapshot.ofVerified(rows.toList())
+    CompleteSnapshot.forTesting(rows.toList(), ownerId = "snapshot-owner")
+
+/**
+ * A snapshot that could NOT be proven complete. Merges are still allowed from
+ * one of these, but no deletion may be derived from absence.
+ */
+private fun unprovenSnapshot(vararg rows: RemoteExpenseRow): CompleteSnapshot<RemoteExpenseRow> =
+    CompleteSnapshot.forTesting(
+        rows.toList(),
+        ownerId = "snapshot-owner",
+        authorizesAbsenceDeletion = false
+    )

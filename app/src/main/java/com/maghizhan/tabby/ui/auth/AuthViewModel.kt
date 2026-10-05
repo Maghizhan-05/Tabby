@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maghizhan.tabby.data.remote.AuthServicing
 import com.maghizhan.tabby.data.remote.AuthSession
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,13 +37,20 @@ sealed interface AuthUiState {
 /**
  * Owns the router state.
  *
- * Concurrency rule: every auth transition runs under [authMutex] and stamps a
- * monotonic [intentCounter]. Auth operations overlap in practice — an OAuth
- * callback can arrive mid-restore, and a user can hit sign-out while a slow
- * sign-in is still in flight — and without ordering, whichever network call
- * happens to finish last wins. That is how a signed-out user gets silently
- * re-authenticated by a stale sign-in. A result is applied only if no newer
- * intent started after it, so the user's most recent action always decides.
+ * Concurrency rule: every auth transition takes a monotonic id from
+ * [intentCounter] when it STARTS, and may commit only if it is still the newest
+ * *started* intent.
+ *
+ * Comparing against the newest started intent rather than the newest *committed*
+ * one is the whole point. A newer sign-out that is still in flight — or that
+ * failed outright — has committed nothing, so a committed-state comparison would
+ * let an older sign-in land afterwards and silently re-authenticate a user who
+ * deliberately signed out. Superseded work is discarded, never applied late.
+ *
+ * [CancellationException] is always rethrown rather than folded into a state.
+ * Swallowing it would detach a cancelled coroutine from its scope: the ViewModel
+ * could be cleared while an auth call kept running, which breaks structured
+ * concurrency instead of merely being untidy.
  */
 class AuthViewModel(
     private val authService: AuthServicing
@@ -53,11 +61,8 @@ class AuthViewModel(
 
     private val authMutex = Mutex()
 
-    /** Monotonic id for each started auth intent; guarded by [authMutex]. */
+    /** Monotonic id handed to each auth intent as it starts; guarded by [authMutex]. */
     private var intentCounter: Long = 0L
-
-    /** The newest intent that has *committed* a state; guarded by [authMutex]. */
-    private var latestCommittedIntent: Long = 0L
 
     /**
      * Handle to the restore started in `init`, so tests (and any future caller
@@ -77,15 +82,14 @@ class AuthViewModel(
      */
     suspend fun restoreSession() {
         val intent = beginIntent()
-        val outcome = runCatching { authService.currentSession() }
-        val next = outcome.fold(
-            onSuccess = { session ->
-                session?.let { AuthUiState.Authenticated(it) } ?: AuthUiState.SignedOut()
-            },
-            onFailure = { error ->
-                AuthUiState.SignedOut(error = error.message ?: "Could not restore your session.")
-            }
-        )
+        val next = try {
+            val session = authService.currentSession()
+            session?.let { AuthUiState.Authenticated(it) } ?: AuthUiState.SignedOut()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            AuthUiState.SignedOut(error = error.message ?: "Could not restore your session.")
+        }
         commit(intent, next)
     }
 
@@ -95,25 +99,44 @@ class AuthViewModel(
     suspend fun signUpEmail(email: String, password: String) =
         authenticate { authService.signUpEmail(email, password) }
 
-    suspend fun signInWithGoogle() = authenticate { authService.signInWithGoogle() }
+    /**
+     * Opens the Google consent page and returns.
+     *
+     * Deliberately does NOT authenticate and does NOT touch the router: the
+     * browser round-trip only finishes when the custom-scheme callback arrives
+     * at [handleOAuthCallback]. Claiming a session here reported "no session" on
+     * a first-ever login, because the library call returns as soon as the
+     * browser opens.
+     */
+    suspend fun beginGoogleSignIn() {
+        authService.beginGoogleSignIn()
+    }
 
-    /** Completes an OAuth round-trip from the custom-scheme callback URL. */
+    /**
+     * Completes the OAuth round-trip from the callback URL. This is the call
+     * that actually authenticates, by exchanging the PKCE code for a session.
+     */
     suspend fun handleOAuthCallback(callbackUrl: String) =
         authenticate { authService.completeOAuth(callbackUrl) }
 
     suspend fun signOut() {
         val intent = beginIntent()
-        runCatching { authService.signOut() }
-        // Committed regardless: locally the user IS signed out even if the
-        // network call to revoke the token failed.
+        try {
+            authService.signOut()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            // Ignored on purpose: locally the user IS signed out even when
+            // revoking the token over the network fails.
+        }
         commit(intent, AuthUiState.SignedOut())
     }
 
     /**
      * Runs an interactive sign-in, committing only if it is still the newest
-     * intent. Rethrows so the caller can surface the failure, but leaves the
-     * router untouched on failure — a failed sign-in must not kick an already
-     * authenticated user out.
+     * started intent. Rethrows so the caller can surface the failure, but leaves
+     * the router untouched on failure — a wrong password at a re-auth prompt
+     * must not evict an already authenticated user.
      */
     private suspend fun authenticate(block: suspend () -> AuthSession) {
         val intent = beginIntent()
@@ -124,14 +147,13 @@ class AuthViewModel(
     private suspend fun beginIntent(): Long = authMutex.withLock { ++intentCounter }
 
     /**
-     * Atomic compare-and-set: applies [state] only when no later intent has
-     * already committed. Read and write happen under the same lock, so the
-     * check-then-set cannot interleave.
+     * Atomic compare-and-set against the newest *started* intent. Read and write
+     * happen under the same lock, so the check-then-set cannot interleave.
      */
     private suspend fun commit(intent: Long, state: AuthUiState) {
         authMutex.withLock {
-            if (intent < latestCommittedIntent) return
-            latestCommittedIntent = intent
+            // Strictly newer work has started, so this result is stale.
+            if (intent != intentCounter) return
             _uiState.value = state
         }
     }

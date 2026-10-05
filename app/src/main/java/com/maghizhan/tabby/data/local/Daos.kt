@@ -1,9 +1,6 @@
 package com.maghizhan.tabby.data.local
 
 import androidx.room.Dao
-import androidx.room.Delete
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
 import com.maghizhan.tabby.data.local.entity.CategoryEntity
@@ -78,14 +75,33 @@ interface ExpenseDao {
     )
     suspend fun pendingPush(ownerId: String, syncedState: Int = SyncState.SYNCED.raw): List<ExpenseEntity>
 
+    /**
+     * Raw primary-key upsert. INSERT has no WHERE clause, so owner scoping is
+     * impossible here: callers MUST route rows through
+     * [com.maghizhan.tabby.data.local.WriteGuard] first, which asserts the
+     * active session owns the record and normalizes its money. Only the sync
+     * coordinator and the guarded write APIs below call this.
+     */
     @Upsert
     suspend fun upsert(expenses: List<ExpenseEntity>)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(expense: ExpenseEntity)
-
-    @Delete
-    suspend fun delete(expense: ExpenseEntity)
+    /**
+     * Marks pushed rows SYNCED, owner-scoped so a push cannot clear another
+     * account's pending state.
+     */
+    @Query(
+        """
+        UPDATE expenses
+        SET syncStateRaw = :syncedState, remoteId = CAST(id AS TEXT)
+        WHERE id IN (:ids)
+          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+        """
+    )
+    suspend fun markSynced(
+        ids: List<UUID>,
+        ownerId: String,
+        syncedState: Int = SyncState.SYNCED.raw
+    )
 
     @Query(
         """
@@ -134,8 +150,24 @@ interface CategoryDao {
     )
     suspend fun pendingPush(ownerId: String, syncedState: Int = SyncState.SYNCED.raw): List<CategoryEntity>
 
+    /** See [ExpenseDao.upsert]: route rows through WriteGuard first. */
     @Upsert
     suspend fun upsert(categories: List<CategoryEntity>)
+
+    @Query(
+        """
+        UPDATE categories
+        SET syncStateRaw = :syncedState, remoteId = CAST(id AS TEXT)
+        WHERE id IN (:ids)
+          AND isDefault = 0
+          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+        """
+    )
+    suspend fun markSynced(
+        ids: List<UUID>,
+        ownerId: String,
+        syncedState: Int = SyncState.SYNCED.raw
+    )
 
     /** Owner-scoped, and never deletes a shared default category. */
     @Query(
@@ -188,8 +220,23 @@ interface FriendDao {
     )
     suspend fun pendingPush(ownerId: String, syncedState: Int = SyncState.SYNCED.raw): List<FriendEntity>
 
+    /** See [ExpenseDao.upsert]: route rows through WriteGuard first. */
     @Upsert
     suspend fun upsert(friends: List<FriendEntity>)
+
+    @Query(
+        """
+        UPDATE friends
+        SET syncStateRaw = :syncedState, remoteId = CAST(id AS TEXT)
+        WHERE id IN (:ids)
+          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+        """
+    )
+    suspend fun markSynced(
+        ids: List<UUID>,
+        ownerId: String,
+        syncedState: Int = SyncState.SYNCED.raw
+    )
 
     @Query(
         """

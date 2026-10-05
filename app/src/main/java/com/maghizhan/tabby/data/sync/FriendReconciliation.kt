@@ -12,6 +12,11 @@ import java.util.UUID
  * caller MUST reconcile a complete pull before pushing, because absence from the
  * snapshot is read as "deleted on another device" and pushing first would
  * resurrect rows deleted elsewhere.
+ *
+ * Conflict policy is identical too: while a remote row is still PRESENT a
+ * pending local edit wins, but a remote DELETION outranks a dirty local edit
+ * once the row is gone remotely. See [ExpenseReconciliation.plan] for why that
+ * asymmetry is deliberate.
  */
 object FriendReconciliation {
 
@@ -71,10 +76,18 @@ object FriendReconciliation {
         }
 
         // Absence means "deleted elsewhere" only for a row the backend has seen.
-        for (record in localForOwner) {
-            if (remoteById.containsKey(record.id)) continue
-            if (record.syncState != SyncState.SYNCED && !record.hasRemoteIdentity) continue
-            deletions += record.id
+        // ...and only when the snapshot PROVED itself complete. An unproven
+        // snapshot (count missing, count moved mid-fetch, page ceiling) may be
+        // merged from but must never authorise a deletion: a row skipped by a
+        // shifting offset window is indistinguishable from a row deleted
+        // elsewhere, so deleting here would destroy live data on a transient
+        // race. Skipping deletions this cycle self-corrects on the next one.
+        if (remote.authorizesAbsenceDeletion) {
+            for (record in localForOwner) {
+                if (remoteById.containsKey(record.id)) continue
+                if (record.syncState != SyncState.SYNCED && !record.hasRemoteIdentity) continue
+                deletions += record.id
+            }
         }
 
         return Plan(

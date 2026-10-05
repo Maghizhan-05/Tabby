@@ -14,10 +14,33 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.Tabby">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              OAuth callback. The scheme/host must stay in lockstep with
+              OAuthCallback.SCHEME / .HOST and with the Supabase Auth config.
+
+              singleTask (above) so the callback reaches the EXISTING activity via
+              onNewIntent rather than stacking a second copy, which would restart
+              the router mid-exchange.
+
+              This filter is necessarily exported, so any app can deliver a URL to
+              it. OAuthCallback.parse validates scheme, host and boundary before a
+              code is read, and PKCE means an intercepted code is useless without
+              the verifier held in this process.
+            -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="auth-callback"
+                    android:scheme="com.maghizhan.tabby" />
             </intent-filter>
         </activity>
     </application>

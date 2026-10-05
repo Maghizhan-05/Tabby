@@ -1,8 +1,8 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 1,
-    "identityHash": "73b30ff1d3be33a3a82d56a2d149b887",
+    "version": 2,
+    "identityHash": "5bd6c01b54ea2f7921626a63ed1a288b",
     "entities": [
       {
         "tableName": "expenses",
@@ -29,8 +29,7 @@
           {
             "fieldPath": "note",
             "columnName": "note",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "date",
@@ -59,14 +58,12 @@
           {
             "fieldPath": "remoteId",
             "columnName": "remoteId",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "ownerId",
             "columnName": "ownerId",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "revision",
@@ -109,8 +106,7 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_expenses_syncStateRaw` ON `${TABLE_NAME}` (`syncStateRaw`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "categories",
@@ -149,14 +145,12 @@
           {
             "fieldPath": "remoteId",
             "columnName": "remoteId",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "ownerId",
             "columnName": "ownerId",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -175,8 +169,7 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_categories_ownerId` ON `${TABLE_NAME}` (`ownerId`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "friends",
@@ -197,8 +190,7 @@
           {
             "fieldPath": "ownerId",
             "columnName": "ownerId",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "theyOweUs",
@@ -233,8 +225,7 @@
           {
             "fieldPath": "remoteId",
             "columnName": "remoteId",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -253,12 +244,11 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_friends_ownerId` ON `${TABLE_NAME}` (`ownerId`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "user_profiles",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `ownerId` TEXT, `displayName` TEXT, `currencyCode` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `email` TEXT NOT NULL, `displayName` TEXT, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -267,26 +257,19 @@
             "notNull": true
           },
           {
-            "fieldPath": "ownerId",
-            "columnName": "ownerId",
-            "affinity": "TEXT",
-            "notNull": false
-          },
-          {
-            "fieldPath": "displayName",
-            "columnName": "displayName",
-            "affinity": "TEXT",
-            "notNull": false
-          },
-          {
-            "fieldPath": "currencyCode",
-            "columnName": "currencyCode",
+            "fieldPath": "email",
+            "columnName": "email",
             "affinity": "TEXT",
             "notNull": true
           },
           {
-            "fieldPath": "updatedAt",
-            "columnName": "updatedAt",
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
             "affinity": "INTEGER",
             "notNull": true
           }
@@ -296,15 +279,12 @@
           "columnNames": [
             "id"
           ]
-        },
-        "indices": [],
-        "foreignKeys": []
+        }
       }
     ],
-    "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '73b30ff1d3be33a3a82d56a2d149b887')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5bd6c01b54ea2f7921626a63ed1a288b')"
     ]
   }
 }

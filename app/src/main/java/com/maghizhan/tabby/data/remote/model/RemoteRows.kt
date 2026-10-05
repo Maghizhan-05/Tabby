@@ -75,7 +75,13 @@ internal object RowDecoding {
         }
     }
 
-    /** `numeric`: accepts a JSON number or a quoted string, never a Double. */
+    /**
+     * `numeric`: accepts a JSON number, or a quoted string **only** for this
+     * type. PostgREST returns `numeric` as a quoted string precisely so clients
+     * do not route it through a binary float, so rejecting strings here would
+     * reject the backend's own well-formed output. The value is parsed as
+     * [BigDecimal] either way — never a Double.
+     */
     fun decimal(row: JsonObject, key: String): BigDecimal {
         val primitive = primitiveOrNull(row, key)
             ?: throw RowDecodingException("Missing field: $key")
@@ -91,16 +97,35 @@ internal object RowDecoding {
         return Timestamps.parse(raw) ?: throw RowDecodingException("Not a timestamp: $raw")
     }
 
-    /** Absent or null uses [default]; a present but malformed value throws. */
+    /**
+     * Absent or null uses [default]; a present but malformed value throws.
+     *
+     * A QUOTED value such as `"true"` is rejected: `JsonPrimitive.content`
+     * strips the quotes, so reading it alone would silently accept a string
+     * where the schema says boolean. Swift's `Decodable` treats that as a type
+     * mismatch, and the two clients must agree on what the backend is allowed to
+     * send — a quoted boolean means something upstream is wrong, and failing
+     * loudly is how we find out.
+     */
     fun boolean(row: JsonObject, key: String, default: Boolean): Boolean {
         val primitive = primitiveOrNull(row, key) ?: return default
+        if (primitive.isString) {
+            throw RowDecodingException("Not a boolean (quoted string): $key=${primitive.content}")
+        }
         return primitive.content.toBooleanStrictOrNull()
             ?: throw RowDecodingException("Not a boolean: $key=${primitive.content}")
     }
 
-    /** Absent or null uses [default]; a present but malformed value throws. */
+    /**
+     * Absent or null uses [default]; a present but malformed value throws.
+     * A quoted value such as `"12"` is rejected for the same reason as
+     * [boolean]: the schema says integer, so a string is a type mismatch.
+     */
     fun int(row: JsonObject, key: String, default: Int): Int {
         val primitive = primitiveOrNull(row, key) ?: return default
+        if (primitive.isString) {
+            throw RowDecodingException("Not an integer (quoted string): $key=${primitive.content}")
+        }
         return primitive.content.toIntOrNull()
             ?: throw RowDecodingException("Not an integer: $key=${primitive.content}")
     }

@@ -48,6 +48,25 @@ android {
         )
     }
 
+    sourceSets {
+        // MigrationTestHelper loads the exported schema JSON through the
+        // Context's assets, and Robolectric serves assets from the variant
+        // under test — NOT from the test source set — so the schemas are
+        // attached to each variant that has unit tests. Without this the helper
+        // cannot find 1.json and the migration ships untested.
+        //
+        // Both variants, not just debug: `test` runs testDebugUnitTest AND
+        // testReleaseUnitTest, so debug-only assets make the release run fail.
+        // The cost is a few KB of JSON in the APK, which is the right trade for
+        // having the migration actually verified.
+        getByName("debug") {
+            assets.srcDir("$projectDir/schemas")
+        }
+        getByName("release") {
+            assets.srcDir("$projectDir/schemas")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
