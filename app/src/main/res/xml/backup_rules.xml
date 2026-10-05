@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 and below (fullBackupContent).
+
+  Backup is disabled outright via android:allowBackup="false", so these rules
+  are defence in depth: if backup is ever re-enabled, the Room database holding
+  expense records and the preferences holding Supabase auth tokens must still
+  never leave the device. Exclusions are listed explicitly rather than relying
+  on the default include-everything behaviour.
+-->
+<full-backup-content>
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="file" path="." />
+</full-backup-content>
