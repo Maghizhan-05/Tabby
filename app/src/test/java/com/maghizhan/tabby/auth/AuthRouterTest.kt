@@ -123,7 +123,7 @@ class AuthRouterTest {
             fake.openGate()
             viewModel.restoreJob.join()
 
-            assertEquals(AuthUiState.SignedOut, viewModel.uiState.value)
+            assertEquals(AuthUiState.SignedOut(), viewModel.uiState.value)
         }
 
     @Test
@@ -179,14 +179,14 @@ class AuthRouterTest {
 
             fake.restoreStarted.await()
             viewModel.signOut()
-            assertEquals(AuthUiState.SignedOut, viewModel.uiState.value)
+            assertEquals(AuthUiState.SignedOut(), viewModel.uiState.value)
 
             fake.openGate()
             viewModel.restoreJob.join()
 
             assertEquals(
                 "late restore re-authenticated a user who had already signed out",
-                AuthUiState.SignedOut,
+                AuthUiState.SignedOut(),
                 viewModel.uiState.value
             )
             assertTrue(fake.signOutCalled)

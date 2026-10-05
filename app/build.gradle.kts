@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +7,20 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
+
+/**
+ * Supabase credentials come from local.properties (gitignored) so no key is
+ * committed. Absent values leave the app buildable and runnable: the client
+ * reports itself unconfigured instead of crashing on launch.
+ *
+ * Loaded at the top level rather than inside `android { }`, where the `java`
+ * identifier resolves to the Java extension and shadows the package name.
+ */
+val localProperties = Properties()
+rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use {
+    localProperties.load(it)
+}
+
 
 android {
     namespace = "com.maghizhan.tabby"
@@ -19,6 +35,17 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField(
+            "String",
+            "SUPABASE_URL",
+            "\"${localProperties.getProperty("supabase.url", "")}\""
+        )
+        buildConfigField(
+            "String",
+            "SUPABASE_PUBLISHABLE_KEY",
+            "\"${localProperties.getProperty("supabase.publishableKey", "")}\""
+        )
     }
 
     buildTypes {
@@ -41,6 +68,13 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
     }
 }
 
@@ -68,6 +102,20 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
 
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.postgrest)
+    implementation(libs.supabase.auth)
+    // CIO rather than the OkHttp engine: Ktor's OkHttp engine pulls
+    // okhttp-android 5.5.0, which requires compileSdk 37, above the maximum AGP
+    // 8.13 supports. CIO is pure Kotlin and has no Android API floor.
+    implementation(libs.ktor.client.cio)
+
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Robolectric so the Room DAO owner-isolation rules are tested against a
+    // real SQLite database on the JVM, not a hand-written fake that could agree
+    // with a wrong query.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.room.testing)
 }

@@ -1,8 +1,10 @@
 package com.maghizhan.tabby.data.remote.model
 
+import com.maghizhan.tabby.data.sync.MoneyValidation
 import com.maghizhan.tabby.data.sync.SyncState
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.math.BigDecimal
@@ -15,27 +17,52 @@ class RowDecodingException(message: String) : Exception(message)
 /**
  * Decoding helpers shared by every remote row.
  *
- * Deliberately tolerant in the same places the iOS decoder is: PostgREST returns
- * `numeric` as a JSON number *or* a quoted string depending on configuration,
- * and `timestamptz` with or without fractional seconds. Money is decoded to
- * [BigDecimal] and never routed through Double — the exact-decimal guarantee the
- * iOS side gets from `Decimal`.
+ * Tolerant only where PostgREST is genuinely ambiguous — `numeric` arrives as a
+ * JSON number *or* a quoted string, and `timestamptz` with or without fractional
+ * seconds. Money is decoded to [BigDecimal] and never routed through Double,
+ * which is the exact-decimal guarantee the iOS side gets from `Decimal`.
+ *
+ * Everywhere else decoding is strict and throws, because silent coercion
+ * changes user data:
+ *
+ * - JSON `null` is distinguished from the four-character string `"null"`, so a
+ *   note a user actually typed as "null" survives instead of becoming absent.
+ * - A field declared as text must BE JSON text; a number or boolean there is a
+ *   schema mismatch worth failing on, not something to stringify.
+ * - A malformed boolean or integer throws rather than falling back to a default,
+ *   which would quietly mislabel a user category as a shared default.
  */
 internal object RowDecoding {
 
     fun obj(element: JsonElement, context: String): JsonObject =
         element as? JsonObject ?: throw RowDecodingException("Not an object: $context")
 
+    /**
+     * The field's scalar value, or null when the key is absent or holds JSON
+     * `null`. A non-scalar (object/array) is a schema mismatch and throws.
+     */
+    private fun primitiveOrNull(row: JsonObject, key: String): JsonPrimitive? {
+        val value = row[key] ?: return null
+        if (value is JsonNull) return null
+        return value as? JsonPrimitive
+            ?: throw RowDecodingException("Field is not a scalar: $key")
+    }
+
+    /** A required text field. Must be JSON text, not a coerced number/boolean. */
     fun string(row: JsonObject, key: String): String {
-        val primitive = row[key] as? JsonPrimitive
+        val primitive = primitiveOrNull(row, key)
             ?: throw RowDecodingException("Missing field: $key")
-        if (primitive.isString) return primitive.content
+        if (!primitive.isString) throw RowDecodingException("Field is not a string: $key")
         return primitive.content
     }
 
+    /**
+     * An optional text field. Only an absent key or JSON `null` yields null —
+     * the literal string "null" is a legitimate value and is preserved.
+     */
     fun stringOrNull(row: JsonObject, key: String): String? {
-        val primitive = row[key] as? JsonPrimitive ?: return null
-        if (primitive.content == "null") return null
+        val primitive = primitiveOrNull(row, key) ?: return null
+        if (!primitive.isString) throw RowDecodingException("Field is not a string: $key")
         return primitive.content
     }
 
@@ -48,9 +75,10 @@ internal object RowDecoding {
         }
     }
 
+    /** `numeric`: accepts a JSON number or a quoted string, never a Double. */
     fun decimal(row: JsonObject, key: String): BigDecimal {
-        val primitive = row[key] as? JsonPrimitive
-            ?: throw RowDecodingException("Not a decimal: $key")
+        val primitive = primitiveOrNull(row, key)
+            ?: throw RowDecodingException("Missing field: $key")
         return try {
             BigDecimal(primitive.content)
         } catch (_: NumberFormatException) {
@@ -63,14 +91,18 @@ internal object RowDecoding {
         return Timestamps.parse(raw) ?: throw RowDecodingException("Not a timestamp: $raw")
     }
 
+    /** Absent or null uses [default]; a present but malformed value throws. */
     fun boolean(row: JsonObject, key: String, default: Boolean): Boolean {
-        val primitive = row[key] as? JsonPrimitive ?: return default
-        return primitive.content.toBooleanStrictOrNull() ?: default
+        val primitive = primitiveOrNull(row, key) ?: return default
+        return primitive.content.toBooleanStrictOrNull()
+            ?: throw RowDecodingException("Not a boolean: $key=${primitive.content}")
     }
 
+    /** Absent or null uses [default]; a present but malformed value throws. */
     fun int(row: JsonObject, key: String, default: Int): Int {
-        val primitive = row[key] as? JsonPrimitive ?: return default
-        return primitive.content.toIntOrNull() ?: default
+        val primitive = primitiveOrNull(row, key) ?: return default
+        return primitive.content.toIntOrNull()
+            ?: throw RowDecodingException("Not an integer: $key=${primitive.content}")
     }
 
     fun <T> array(element: JsonElement, decode: (JsonObject) -> T): List<T> {
@@ -94,7 +126,9 @@ data class RemoteExpenseRow(
         fun from(row: JsonObject): RemoteExpenseRow = RemoteExpenseRow(
             id = RowDecoding.uuid(row, "id"),
             userId = RowDecoding.string(row, "user_id"),
-            amount = RowDecoding.decimal(row, "amount"),
+            // Validated on the way in: an amount the backend column cannot hold
+            // must fail here rather than be silently rounded when persisted.
+            amount = MoneyValidation.normalizedAmount(RowDecoding.decimal(row, "amount")),
             categoryName = RowDecoding.string(row, "category_name"),
             note = RowDecoding.stringOrNull(row, "note"),
             date = RowDecoding.instant(row, "date"),
@@ -144,8 +178,14 @@ data class RemoteFriendRow(
             id = RowDecoding.uuid(row, "id"),
             userId = RowDecoding.string(row, "user_id"),
             name = RowDecoding.string(row, "name"),
-            theyOweUs = RowDecoding.decimal(row, "they_owe_us"),
-            weOweThem = RowDecoding.decimal(row, "we_owe_them"),
+            // Balances are "how much is owed" and cannot be negative — the
+            // direction lives in which of the two columns holds the value.
+            theyOweUs = MoneyValidation.normalizedBalance(
+                RowDecoding.decimal(row, "they_owe_us"), "they_owe_us"
+            ),
+            weOweThem = MoneyValidation.normalizedBalance(
+                RowDecoding.decimal(row, "we_owe_them"), "we_owe_them"
+            ),
             createdAt = RowDecoding.instant(row, "created_at"),
             updatedAt = RowDecoding.instant(row, "updated_at")
         )

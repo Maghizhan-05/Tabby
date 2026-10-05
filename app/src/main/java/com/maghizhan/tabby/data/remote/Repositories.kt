@@ -6,39 +6,35 @@ import com.maghizhan.tabby.data.remote.model.RemoteFriendRow
 import java.util.UUID
 
 /**
- * A page of remote rows plus whether the backend had more to give.
+ * Repository contracts, mirroring the iOS protocols.
  *
- * The reconciliation rules treat absence from a snapshot as "deleted on another
- * device", so a *partial* snapshot would silently delete real records. Callers
- * must therefore keep paging until [isComplete] is true before reconciling —
- * this type exists to make that requirement impossible to overlook, mirroring
- * the iOS `PaginatedSnapshot`.
- */
-data class PaginatedSnapshot<T>(
-    val rows: List<T>,
-    val isComplete: Boolean
-)
-
-/**
- * Repository contracts, mirroring the iOS protocols. Every method is
- * owner-verified: the active owner id is passed explicitly rather than read from
- * ambient state, so a signed-out or mismatched caller cannot reach another
- * account's rows even if RLS were misconfigured.
+ * Note what is NOT a parameter: the owner id. Every implementation derives
+ * `user_id` from the *authenticated session* rather than trusting a caller, so a
+ * bug or a hostile call site cannot read or write another account's rows even if
+ * RLS were misconfigured. A caller-supplied owner id was a confused-deputy hole:
+ * a stale `ownerId` cached locally could be replayed against the backend.
+ *
+ * Fetches return [CompleteSnapshot], which can only be produced by paging to
+ * termination — absence-based deletion is unsound against a partial result, and
+ * the previous `isComplete` boolean could simply be ignored.
  */
 interface ExpenseRepositoring {
-    suspend fun fetchAll(ownerId: String): PaginatedSnapshot<RemoteExpenseRow>
-    suspend fun upsert(rows: List<RemoteExpenseRow>, ownerId: String)
-    suspend fun delete(ids: List<UUID>, ownerId: String)
+    suspend fun fetchAll(): CompleteSnapshot<RemoteExpenseRow>
+    suspend fun upsert(rows: List<RemoteExpenseRow>)
+    suspend fun delete(ids: List<UUID>)
 }
 
 interface CategoryRepositoring {
-    suspend fun fetchAll(ownerId: String): PaginatedSnapshot<RemoteCategoryRow>
-    suspend fun upsert(rows: List<RemoteCategoryRow>, ownerId: String)
-    suspend fun delete(ids: List<UUID>, ownerId: String)
+    suspend fun fetchAll(): CompleteSnapshot<RemoteCategoryRow>
+    suspend fun upsert(rows: List<RemoteCategoryRow>)
+    suspend fun delete(ids: List<UUID>)
 }
 
 interface FriendRepositoring {
-    suspend fun fetchAll(ownerId: String): PaginatedSnapshot<RemoteFriendRow>
-    suspend fun upsert(rows: List<RemoteFriendRow>, ownerId: String)
-    suspend fun delete(ids: List<UUID>, ownerId: String)
+    suspend fun fetchAll(): CompleteSnapshot<RemoteFriendRow>
+    suspend fun upsert(rows: List<RemoteFriendRow>)
+    suspend fun delete(ids: List<UUID>)
 }
+
+/** Raised when an operation needs an authenticated session and there is none. */
+class NotAuthenticatedException : Exception("No authenticated Supabase session.")

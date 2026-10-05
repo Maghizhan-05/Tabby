@@ -1,5 +1,6 @@
 package com.maghizhan.tabby.sync
 
+import com.maghizhan.tabby.data.remote.CompleteSnapshot
 import com.maghizhan.tabby.data.remote.model.RemoteCategoryRow
 import com.maghizhan.tabby.data.sync.CategoryReconciliation
 import com.maghizhan.tabby.data.sync.SyncState
@@ -37,7 +38,7 @@ class CategoryReconciliationTest {
         val id = UUID.randomUUID()
         val plan = CategoryReconciliation.plan(
             local = emptyList(),
-            remote = listOf(row(id, ownerA, "Coffee")),
+            remote = snapshot(row(id, ownerA, "Coffee")),
             activeOwnerId = ownerA
         )
         assertEquals(listOf(id), plan.inserts.map { it.id })
@@ -49,7 +50,7 @@ class CategoryReconciliationTest {
         val localDefault = UUID.randomUUID()
         val plan = CategoryReconciliation.plan(
             local = listOf(local(localDefault, null, "Food", isDefault = true, state = SyncState.SYNCED)),
-            remote = listOf(row(remoteDefault, ownerA, "Food", isDefault = true)),
+            remote = snapshot(row(remoteDefault, ownerA, "Food", isDefault = true)),
             activeOwnerId = ownerA
         )
         assertTrue("a seeded default must never be inserted, updated or deleted", plan.isEmpty)
@@ -60,7 +61,7 @@ class CategoryReconciliationTest {
         val id = UUID.randomUUID()
         val plan = CategoryReconciliation.plan(
             local = listOf(local(id, ownerA, "Coffe", state = SyncState.SYNCED)),
-            remote = listOf(row(id, ownerA, "Coffee")),
+            remote = snapshot(row(id, ownerA, "Coffee")),
             activeOwnerId = ownerA
         )
         assertEquals(listOf(id), plan.updates.map { it.id })
@@ -72,7 +73,7 @@ class CategoryReconciliationTest {
         val id = UUID.randomUUID()
         val plan = CategoryReconciliation.plan(
             local = listOf(local(id, ownerA, "Coffee", sortOrder = 3, state = SyncState.SYNCED)),
-            remote = listOf(row(id, ownerA, "Coffee", sortOrder = 3)),
+            remote = snapshot(row(id, ownerA, "Coffee", sortOrder = 3)),
             activeOwnerId = ownerA
         )
         assertTrue(plan.isEmpty)
@@ -84,7 +85,7 @@ class CategoryReconciliationTest {
         val remoteId = UUID.randomUUID()
         val plan = CategoryReconciliation.plan(
             local = listOf(local(localId, ownerA, "Coffee", state = SyncState.LOCAL)),
-            remote = listOf(row(remoteId, ownerA, "Coffee")),
+            remote = snapshot(row(remoteId, ownerA, "Coffee")),
             activeOwnerId = ownerA
         )
 
@@ -102,7 +103,7 @@ class CategoryReconciliationTest {
         val remoteId = UUID.randomUUID()
         val plan = CategoryReconciliation.plan(
             local = listOf(local(localId, ownerA, "coffee", state = SyncState.LOCAL)),
-            remote = listOf(row(remoteId, ownerA, "Coffee")),
+            remote = snapshot(row(remoteId, ownerA, "Coffee")),
             activeOwnerId = ownerA
         )
         assertEquals(listOf(localId), plan.deletions)
@@ -113,7 +114,7 @@ class CategoryReconciliationTest {
         val id = UUID.randomUUID()
         val plan = CategoryReconciliation.plan(
             local = listOf(local(id, ownerA, "Coffee", state = SyncState.SYNCED)),
-            remote = emptyList(),
+            remote = snapshot(),
             activeOwnerId = ownerA
         )
         assertEquals(listOf(id), plan.deletions)
@@ -124,7 +125,7 @@ class CategoryReconciliationTest {
         val id = UUID.randomUUID()
         val plan = CategoryReconciliation.plan(
             local = listOf(local(id, ownerA, "Coffee", state = SyncState.LOCAL)),
-            remote = emptyList(),
+            remote = snapshot(),
             activeOwnerId = ownerA
         )
         assertTrue(plan.deletions.isEmpty())
@@ -135,7 +136,7 @@ class CategoryReconciliationTest {
         val id = UUID.randomUUID()
         val plan = CategoryReconciliation.plan(
             local = listOf(local(UUID.randomUUID(), ownerB, "Theirs", state = SyncState.SYNCED)),
-            remote = listOf(row(id, ownerB, "Theirs")),
+            remote = snapshot(row(id, ownerB, "Theirs")),
             activeOwnerId = ownerA
         )
         assertTrue(plan.isEmpty)
@@ -145,9 +146,17 @@ class CategoryReconciliationTest {
     fun `a blank active owner produces no plan`() {
         val plan = CategoryReconciliation.plan(
             local = listOf(local(UUID.randomUUID(), ownerA, "Coffee", state = SyncState.SYNCED)),
-            remote = emptyList(),
+            remote = snapshot(),
             activeOwnerId = "  "
         )
         assertTrue(plan.isEmpty)
     }
 }
+
+
+/**
+ * Test-only helper: builds a snapshot the test author asserts is complete.
+ * Production code can only obtain one by paging to termination.
+ */
+private fun snapshot(vararg rows: RemoteCategoryRow): CompleteSnapshot<RemoteCategoryRow> =
+    CompleteSnapshot.ofVerified(rows.toList())

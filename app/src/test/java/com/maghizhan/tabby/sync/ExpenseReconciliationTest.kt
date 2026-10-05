@@ -1,6 +1,7 @@
 package com.maghizhan.tabby.sync
 
 import com.maghizhan.tabby.data.remote.model.LocalRecord
+import com.maghizhan.tabby.data.remote.CompleteSnapshot
 import com.maghizhan.tabby.data.remote.model.RemoteExpenseRow
 import com.maghizhan.tabby.data.sync.ExpenseReconciliation
 import com.maghizhan.tabby.data.sync.SyncState
@@ -52,7 +53,7 @@ class ExpenseReconciliationTest {
         val id = UUID.randomUUID()
         val plan = ExpenseReconciliation.plan(
             local = emptyList(),
-            remote = listOf(row(id = id, owner = ownerA, amount = BigDecimal("42"), updatedAt = t0)),
+            remote = snapshot(row(id = id, owner = ownerA, amount = BigDecimal("42"), updatedAt = t0)),
             activeOwnerId = ownerA
         )
 
@@ -67,7 +68,7 @@ class ExpenseReconciliationTest {
         val id = UUID.randomUUID()
         val plan = ExpenseReconciliation.plan(
             local = listOf(local(id, ownerA, t0, SyncState.SYNCED)),
-            remote = listOf(row(id = id, owner = ownerA, amount = BigDecimal("99"), updatedAt = t1)),
+            remote = snapshot(row(id = id, owner = ownerA, amount = BigDecimal("99"), updatedAt = t1)),
             activeOwnerId = ownerA
         )
 
@@ -86,7 +87,7 @@ class ExpenseReconciliationTest {
                 local(olderId, ownerA, t1, SyncState.SYNCED),
                 local(sameId, ownerA, t0, SyncState.SYNCED)
             ),
-            remote = listOf(
+            remote = snapshot(
                 row(id = olderId, owner = ownerA, updatedAt = t0),
                 row(id = sameId, owner = ownerA, updatedAt = t0)
             ),
@@ -103,7 +104,7 @@ class ExpenseReconciliationTest {
     @Test
     fun `repeated pull with no changes produces an empty plan`() {
         val id = UUID.randomUUID()
-        val remote = listOf(row(id = id, owner = ownerA, updatedAt = t0))
+        val remote = snapshot(row(id = id, owner = ownerA, updatedAt = t0))
         val localRows = listOf(local(id, ownerA, t0, SyncState.SYNCED))
 
         repeat(3) {
@@ -117,7 +118,7 @@ class ExpenseReconciliationTest {
         val id = UUID.randomUUID()
         val plan = ExpenseReconciliation.plan(
             local = emptyList(),
-            remote = listOf(
+            remote = snapshot(
                 row(id = id, owner = ownerA, amount = BigDecimal("10"), updatedAt = t0),
                 row(id = id, owner = ownerA, amount = BigDecimal("20"), updatedAt = t1)
             ),
@@ -137,7 +138,7 @@ class ExpenseReconciliationTest {
         val id = UUID.randomUUID()
         val plan = ExpenseReconciliation.plan(
             local = listOf(local(id, ownerA, t0, SyncState.SYNCED)),
-            remote = emptyList(),
+            remote = snapshot(),
             activeOwnerId = ownerA
         )
 
@@ -155,7 +156,7 @@ class ExpenseReconciliationTest {
                 local(dirty, ownerA, t0, SyncState.DIRTY),
                 local(tombstone, ownerA, t0, SyncState.DELETED)
             ),
-            remote = emptyList(),
+            remote = snapshot(),
             activeOwnerId = ownerA
         )
 
@@ -172,7 +173,7 @@ class ExpenseReconciliationTest {
             local = listOf(
                 LocalRecord(id, ownerA, t0, SyncState.DIRTY, hasRemoteIdentity = true)
             ),
-            remote = emptyList(),
+            remote = snapshot(),
             activeOwnerId = ownerA
         )
 
@@ -192,7 +193,7 @@ class ExpenseReconciliationTest {
         val id = UUID.randomUUID()
         val plan = ExpenseReconciliation.plan(
             local = listOf(local(id, ownerA, t1, SyncState.DIRTY)),
-            remote = emptyList(),
+            remote = snapshot(),
             activeOwnerId = ownerA
         )
 
@@ -205,7 +206,7 @@ class ExpenseReconciliationTest {
         val id = UUID.randomUUID()
         val plan = ExpenseReconciliation.plan(
             local = listOf(local(id, ownerA, t0, SyncState.DIRTY)),
-            remote = listOf(row(id = id, owner = ownerA, amount = BigDecimal("99"), updatedAt = t1)),
+            remote = snapshot(row(id = id, owner = ownerA, amount = BigDecimal("99"), updatedAt = t1)),
             activeOwnerId = ownerA
         )
 
@@ -220,7 +221,7 @@ class ExpenseReconciliationTest {
         val id = UUID.randomUUID()
         val plan = ExpenseReconciliation.plan(
             local = listOf(local(id, ownerA, t0, SyncState.DELETED)),
-            remote = listOf(row(id = id, owner = ownerA, updatedAt = t1)),
+            remote = snapshot(row(id = id, owner = ownerA, updatedAt = t1)),
             activeOwnerId = ownerA
         )
 
@@ -237,7 +238,7 @@ class ExpenseReconciliationTest {
         val theirLocal = UUID.randomUUID()
         val plan = ExpenseReconciliation.plan(
             local = listOf(local(theirLocal, ownerB, t0, SyncState.SYNCED)),
-            remote = listOf(row(id = theirRemote, owner = ownerB, updatedAt = t0)),
+            remote = snapshot(row(id = theirRemote, owner = ownerB, updatedAt = t0)),
             activeOwnerId = ownerA
         )
 
@@ -253,7 +254,7 @@ class ExpenseReconciliationTest {
         val id = UUID.randomUUID()
         val plan = ExpenseReconciliation.plan(
             local = listOf(local(id, ownerA, t0, SyncState.SYNCED)),
-            remote = emptyList(),
+            remote = snapshot(),
             activeOwnerId = "   "
         )
 
@@ -265,7 +266,7 @@ class ExpenseReconciliationTest {
         val id = UUID.randomUUID()
         val plan = ExpenseReconciliation.plan(
             local = listOf(local(id, null, t0, SyncState.SYNCED)),
-            remote = listOf(row(id = id, owner = ownerA, amount = BigDecimal("77"), updatedAt = t1)),
+            remote = snapshot(row(id = id, owner = ownerA, amount = BigDecimal("77"), updatedAt = t1)),
             activeOwnerId = ownerA
         )
 
@@ -278,7 +279,7 @@ class ExpenseReconciliationTest {
         val id = UUID.randomUUID()
         val plan = ExpenseReconciliation.plan(
             local = emptyList(),
-            remote = listOf(row(id = id, owner = "OWNER-A", updatedAt = t0)),
+            remote = snapshot(row(id = id, owner = "OWNER-A", updatedAt = t0)),
             activeOwnerId = "owner-a"
         )
 
@@ -287,3 +288,11 @@ class ExpenseReconciliationTest {
 
     // endregion
 }
+
+
+/**
+ * Test-only helper: builds a snapshot the test author asserts is complete.
+ * Production code can only obtain one by paging to termination.
+ */
+private fun snapshot(vararg rows: RemoteExpenseRow): CompleteSnapshot<RemoteExpenseRow> =
+    CompleteSnapshot.ofVerified(rows.toList())

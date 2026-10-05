@@ -1,5 +1,6 @@
 package com.maghizhan.tabby.data.sync
 
+import com.maghizhan.tabby.data.remote.CompleteSnapshot
 import com.maghizhan.tabby.data.remote.model.RemoteCategoryRow
 import java.util.UUID
 
@@ -49,14 +50,14 @@ object CategoryReconciliation {
      */
     fun plan(
         local: List<LocalRecord>,
-        remote: List<RemoteCategoryRow>,
+        remote: CompleteSnapshot<RemoteCategoryRow>,
         activeOwnerId: String
     ): Plan {
         val owner = Ownership.normalized(activeOwnerId) ?: return Plan()
 
         // Last row wins for a duplicated id across pages.
         val remoteById = LinkedHashMap<UUID, RemoteCategoryRow>()
-        remote.filter { Ownership.normalized(it.userId) == owner && !it.isDefault }
+        remote.rows.filter { Ownership.normalized(it.userId) == owner && !it.isDefault }
             .forEach { remoteById[it.id] = it }
 
         val localForOwner = local.filter {

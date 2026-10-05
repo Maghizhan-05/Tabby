@@ -2,6 +2,7 @@ package com.maghizhan.tabby.data.remote.model
 
 import java.time.Instant
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
@@ -15,6 +16,18 @@ import java.time.format.DateTimeParseException
  * names the offending field, exactly as the Swift version does.
  */
 object Timestamps {
+
+    /**
+     * Formats for the backend in full ISO-8601 UTC with microsecond precision,
+     * matching Postgres `timestamptz`. Microseconds (not milliseconds) because
+     * truncating here would make a row we just uploaded read back as older than
+     * its local copy, re-triggering last-writer-wins on every cycle.
+     */
+    private val FORMATTER: DateTimeFormatter = DateTimeFormatter
+        .ofPattern("uuuu-MM-dd'T'HH:mm:ss.SSSSSS'Z'")
+        .withZone(ZoneOffset.UTC)
+
+    fun format(instant: Instant): String = FORMATTER.format(instant)
 
     fun parse(text: String): Instant? {
         val normalized = text.replace(" ", "T")

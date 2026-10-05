@@ -87,11 +87,22 @@ data class FriendEntity(
     val netBalance: BigDecimal get() = theyOweUs.subtract(weOweThem)
 }
 
+/**
+ * The account's profile row.
+ *
+ * Mirrors the iOS `UserProfile` and the backend `profiles` table exactly: `id`
+ * IS `auth.uid` (so there is no separate owner column to scope by), plus `email`
+ * and an optional `displayName`. Android-only preferences such as a currency
+ * override deliberately do NOT live here — they are not in the shared schema,
+ * and adding them would make this table diverge from the row the iOS app and the
+ * backend agree on.
+ */
 @Entity(tableName = "user_profiles")
 data class UserProfileEntity(
-    @PrimaryKey val id: UUID,
-    val ownerId: String?,
+    /** Equals the authenticated user's id (`auth.uid`), stored as text. */
+    @PrimaryKey val id: String,
+    val email: String,
     val displayName: String?,
-    val currencyCode: String,
-    val updatedAt: Instant
+    /** Set by the backend; not a local clock. */
+    val createdAt: Instant
 )

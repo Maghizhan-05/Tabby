@@ -53,7 +53,9 @@ class RemoteRowDecodingTest {
         // Exact decimal, never routed through Double.
         assertEquals(BigDecimal("12.34"), rows[0].amount)
         assertEquals("Lunch", rows[0].note)
-        assertEquals(BigDecimal("5"), rows[1].amount)
+        // Rescaled to the backend column's 2 decimals on the way in, so a value
+        // written as "5" and one written as "5.00" cannot compare unequal.
+        assertEquals(BigDecimal("5.00"), rows[1].amount)
         assertNull(rows[1].note)
     }
 
@@ -74,8 +76,12 @@ class RemoteRowDecodingTest {
         """.trimIndent()
 
         val row = RemoteExpenseRow.list(Json.parseToJsonElement(json)).single()
-        assertEquals(BigDecimal("0.1"), row.amount)
-        assertEquals("0.1", row.amount.toPlainString())
+        // 0.1 is not representable in binary floating point; BigDecimal keeps it
+        // exactly. Scale is normalised to the column's 2 decimals, so the value
+        // is 0.10 - still exactly one tenth, with no float error introduced.
+        assertEquals(BigDecimal("0.10"), row.amount)
+        assertEquals("0.10", row.amount.toPlainString())
+        assertEquals(0, row.amount.compareTo(BigDecimal("0.1")))
     }
 
     @Test

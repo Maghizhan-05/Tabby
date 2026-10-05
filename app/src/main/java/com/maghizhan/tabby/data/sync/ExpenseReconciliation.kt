@@ -1,5 +1,6 @@
 package com.maghizhan.tabby.data.sync
 
+import com.maghizhan.tabby.data.remote.CompleteSnapshot
 import com.maghizhan.tabby.data.remote.model.LocalRecord
 import com.maghizhan.tabby.data.remote.model.RemoteExpenseRow
 import java.util.UUID
@@ -9,10 +10,14 @@ import java.util.UUID
  * *provably complete* remote snapshot. No Room or Supabase imports, so every
  * rule is unit-testable in isolation.
  *
- * Ordering contract: the caller MUST complete a push before fetching the
- * snapshot. Absence from the snapshot is read as "deleted on another device",
- * which is only sound once local work has been uploaded. This is the contract
- * the iOS expense-resurrection regression pinned, ported verbatim.
+ * Ordering contract: the caller MUST reconcile a complete pull BEFORE pushing
+ * local work. Absence from the snapshot is read as "deleted on another device",
+ * and pushing first would re-upload a stale local row that another device had
+ * deleted — the snapshot would then "confirm" it forever. This is exactly the
+ * resurrection bug the iOS `SyncEngine` was fixed for, and its ordering is
+ * ported here verbatim: pull, reconcile, then push. Local tombstones and
+ * genuinely new or edited rows are still pushed immediately afterwards, so
+ * nothing local is lost.
  */
 object ExpenseReconciliation {
 
@@ -53,7 +58,7 @@ object ExpenseReconciliation {
      */
     fun plan(
         local: List<LocalRecord>,
-        remote: List<RemoteExpenseRow>,
+        remote: CompleteSnapshot<RemoteExpenseRow>,
         activeOwnerId: String
     ): Plan {
         val owner = Ownership.normalized(activeOwnerId) ?: return Plan()
@@ -63,7 +68,7 @@ object ExpenseReconciliation {
         // Last row wins for a duplicated id so repeated/overlapping pages are
         // idempotent rather than producing duplicate inserts.
         val remoteById = LinkedHashMap<UUID, RemoteExpenseRow>()
-        remote.filter { Ownership.normalized(it.userId) == owner }
+        remote.rows.filter { Ownership.normalized(it.userId) == owner }
             .forEach { remoteById[it.id] = it }
 
         val localForOwner = local.filter {

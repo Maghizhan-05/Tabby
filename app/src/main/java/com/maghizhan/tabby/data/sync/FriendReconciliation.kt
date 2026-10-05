@@ -1,5 +1,6 @@
 package com.maghizhan.tabby.data.sync
 
+import com.maghizhan.tabby.data.remote.CompleteSnapshot
 import com.maghizhan.tabby.data.remote.model.LocalRecord
 import com.maghizhan.tabby.data.remote.model.RemoteFriendRow
 import java.util.UUID
@@ -8,8 +9,9 @@ import java.util.UUID
  * Pure merge rules for reconciling local friends against an owner-scoped,
  * *provably complete* remote snapshot. Same contract and same rules as
  * [ExpenseReconciliation] — see that type for the ordering requirement: the
- * caller MUST complete a push before fetching, because absence from the snapshot
- * is read as "deleted on another device".
+ * caller MUST reconcile a complete pull before pushing, because absence from the
+ * snapshot is read as "deleted on another device" and pushing first would
+ * resurrect rows deleted elsewhere.
  */
 object FriendReconciliation {
 
@@ -37,13 +39,13 @@ object FriendReconciliation {
      */
     fun plan(
         local: List<LocalRecord>,
-        remote: List<RemoteFriendRow>,
+        remote: CompleteSnapshot<RemoteFriendRow>,
         activeOwnerId: String
     ): Plan {
         val owner = Ownership.normalized(activeOwnerId) ?: return Plan()
 
         val remoteById = LinkedHashMap<UUID, RemoteFriendRow>()
-        remote.filter { Ownership.normalized(it.userId) == owner }
+        remote.rows.filter { Ownership.normalized(it.userId) == owner }
             .forEach { remoteById[it.id] = it }
 
         val localForOwner = local.filter {

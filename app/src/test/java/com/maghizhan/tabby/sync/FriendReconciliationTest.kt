@@ -1,6 +1,7 @@
 package com.maghizhan.tabby.sync
 
 import com.maghizhan.tabby.data.remote.model.LocalRecord
+import com.maghizhan.tabby.data.remote.CompleteSnapshot
 import com.maghizhan.tabby.data.remote.model.RemoteFriendRow
 import com.maghizhan.tabby.data.sync.FriendReconciliation
 import com.maghizhan.tabby.data.sync.SyncState
@@ -38,7 +39,7 @@ class FriendReconciliationTest {
         val id = UUID.randomUUID()
         val plan = FriendReconciliation.plan(
             local = emptyList(),
-            remote = listOf(row(id, ownerA, updatedAt = t0)),
+            remote = snapshot(row(id, ownerA, updatedAt = t0)),
             activeOwnerId = ownerA
         )
         assertEquals(listOf(id), plan.inserts.map { it.id })
@@ -49,7 +50,7 @@ class FriendReconciliationTest {
         val id = UUID.randomUUID()
         val plan = FriendReconciliation.plan(
             local = listOf(local(id, ownerA, t0, SyncState.SYNCED)),
-            remote = listOf(row(id, ownerA, name = "Samantha", updatedAt = t1)),
+            remote = snapshot(row(id, ownerA, name = "Samantha", updatedAt = t1)),
             activeOwnerId = ownerA
         )
         assertEquals(listOf(id), plan.updates.map { it.id })
@@ -61,7 +62,7 @@ class FriendReconciliationTest {
         val id = UUID.randomUUID()
         val plan = FriendReconciliation.plan(
             local = listOf(local(id, ownerA, t0, SyncState.SYNCED)),
-            remote = emptyList(),
+            remote = snapshot(),
             activeOwnerId = ownerA
         )
         assertEquals(listOf(id), plan.deletions)
@@ -72,7 +73,7 @@ class FriendReconciliationTest {
         val id = UUID.randomUUID()
         val plan = FriendReconciliation.plan(
             local = listOf(local(id, ownerA, t0, SyncState.LOCAL)),
-            remote = emptyList(),
+            remote = snapshot(),
             activeOwnerId = ownerA
         )
         assertTrue(plan.deletions.isEmpty())
@@ -83,7 +84,7 @@ class FriendReconciliationTest {
         val id = UUID.randomUUID()
         val plan = FriendReconciliation.plan(
             local = listOf(local(id, ownerA, t0, SyncState.DIRTY)),
-            remote = listOf(row(id, ownerA, name = "Remote", updatedAt = t1)),
+            remote = snapshot(row(id, ownerA, name = "Remote", updatedAt = t1)),
             activeOwnerId = ownerA
         )
         assertTrue(plan.updates.isEmpty())
@@ -95,7 +96,7 @@ class FriendReconciliationTest {
         val theirLocal = UUID.randomUUID()
         val plan = FriendReconciliation.plan(
             local = listOf(local(theirLocal, ownerB, t0, SyncState.SYNCED)),
-            remote = listOf(row(theirRemote, ownerB, updatedAt = t0)),
+            remote = snapshot(row(theirRemote, ownerB, updatedAt = t0)),
             activeOwnerId = ownerA
         )
         assertTrue(plan.inserts.isEmpty())
@@ -107,7 +108,7 @@ class FriendReconciliationTest {
         val id = UUID.randomUUID()
         val plan = FriendReconciliation.plan(
             local = emptyList(),
-            remote = listOf(
+            remote = snapshot(
                 row(id, ownerA, name = "First", updatedAt = t0),
                 row(id, ownerA, name = "Second", updatedAt = t1)
             ),
@@ -117,3 +118,11 @@ class FriendReconciliationTest {
         assertEquals("Second", plan.inserts.first().name)
     }
 }
+
+
+/**
+ * Test-only helper: builds a snapshot the test author asserts is complete.
+ * Production code can only obtain one by paging to termination.
+ */
+private fun snapshot(vararg rows: RemoteFriendRow): CompleteSnapshot<RemoteFriendRow> =
+    CompleteSnapshot.ofVerified(rows.toList())
