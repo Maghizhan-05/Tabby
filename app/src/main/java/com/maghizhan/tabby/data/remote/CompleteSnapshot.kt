@@ -28,8 +28,34 @@ import androidx.annotation.VisibleForTesting
  * So the rule is deliberately strict: completeness is proven only by a **single
  * request** whose exact server-side count matches the rows received, with no
  * duplicate ids. Anything spanning more than one request is unproven: usable for
- * merging, never for deletion. A very large account therefore syncs additively
- * and simply never absence-deletes, which is the correct direction to fail in.
+ * merging, never for deletion.
+ *
+ * ## KNOWN LIMITATION: deletions stop converging above [PAGE_SIZE] rows
+ *
+ * This is a deliberate, accepted trade-off, not an oversight — read it before
+ * changing anything here.
+ *
+ * Once one entity type holds more than [PAGE_SIZE] (1000) rows for a single
+ * account, no fetch can ever be proven complete, because every fetch then spans
+ * more than one request. From that point on, for that entity type:
+ *
+ * - additions and updates still sync normally, in both directions;
+ * - local deletions still propagate to the backend (they are pushed as explicit
+ *   tombstones, which never rely on absence);
+ * - **a deletion made on ANOTHER device stops propagating to this one.** The
+ *   remote row is gone, but its local copy survives indefinitely, because the
+ *   only evidence of a remote deletion is absence from a complete snapshot.
+ *
+ * The user-visible effect is a record deleted elsewhere that lingers on this
+ * device until the account drops back under the threshold. That is strictly
+ * better than the alternative: authorizing deletion from an unproven snapshot
+ * silently destroys records the user still has, and financial data lost that way
+ * is unrecoverable. A lingering row is visible and fixable; a deleted row is not.
+ *
+ * Closing this properly needs a server-side consistent snapshot (an RPC reading
+ * the whole set in one statement, or a documented keyset/watermark strategy that
+ * cannot shift). Both are backend changes, which are out of scope for this
+ * checkpoint by explicit decision, so the safe degradation stands for now.
  */
 class CompleteSnapshot<T> private constructor(
     val rows: List<T>,

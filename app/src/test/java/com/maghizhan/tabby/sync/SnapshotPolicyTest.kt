@@ -139,6 +139,54 @@ class SnapshotPolicyTest {
         assertTrue(failure.exceptionOrNull() is CompleteSnapshot.SessionMismatchException)
     }
 
+    /**
+     * Pins the documented >1000-row limitation as actual behaviour.
+     *
+     * Above [CompleteSnapshot.PAGE_SIZE] rows for one account, no fetch can be
+     * proven complete, so remote deletions stop converging on this device while
+     * additions and updates keep working. That trade-off is accepted and written
+     * up in the README and in CompleteSnapshot's docs — this test exists so the
+     * boundary cannot move silently, in either direction: tightening it would
+     * break deletion for ordinary accounts, loosening it would authorize
+     * deletion from a result set that can skip rows.
+     */
+    @Test
+    fun `an account at the page ceiling still proves completeness`() = runTest {
+        val size = CompleteSnapshot.PAGE_SIZE.toInt()
+        val snapshot = CompleteSnapshot.fetch<Int>(binding(), { it }) { _, _ ->
+            CompleteSnapshot.Page(rows = (1..size).toList(), exactTotal = size.toLong())
+        }
+
+        // Exactly at the ceiling this is still ONE request, so it is proven.
+        assertEquals(1, snapshot.requestsMade)
+        assertTrue(snapshot.authorizesAbsenceDeletion)
+    }
+
+    @Test
+    fun `one row past the ceiling can no longer authorize deletion`() = runTest {
+        val size = CompleteSnapshot.PAGE_SIZE.toInt()
+        val total = size + 1L
+        var call = 0
+
+        val snapshot = CompleteSnapshot.fetch<Int>(binding(), { it }) { _, _ ->
+            call++
+            if (call == 1) CompleteSnapshot.Page((1..size).toList(), exactTotal = total)
+            else CompleteSnapshot.Page(listOf(size + 1), exactTotal = total)
+        }
+
+        // Every row was retrieved and the arithmetic agrees...
+        assertEquals(total.toInt(), snapshot.rows.size)
+        // ...but it took two requests, so deletion is withheld. Merging is
+        // unaffected: the rows are still returned for insert/update.
+        assertEquals(2, snapshot.requestsMade)
+        assertFalse(
+            "a record deleted on another device will linger rather than risk " +
+                "destroying one the user still has",
+            snapshot.authorizesAbsenceDeletion
+        )
+        assertNotNull(snapshot.unprovenReason)
+    }
+
     @Test
     fun `a snapshot applies under its own session`() = runTest {
         val bound = binding()
