@@ -2,6 +2,7 @@ package com.maghizhan.tabby
 
 import android.content.Context
 import com.maghizhan.tabby.data.local.CategoryStore
+import com.maghizhan.tabby.data.local.DefaultCategories
 import com.maghizhan.tabby.data.local.ExpenseStore
 import com.maghizhan.tabby.data.local.FriendStore
 import com.maghizhan.tabby.data.local.RoomTransactionRunner
@@ -33,10 +34,25 @@ class AppGraph(context: Context) {
     val sessions: SessionProvider = SupabaseSessionProvider()
     val authService = SupabaseAuthService()
 
+    /** Read APIs for the UI. Writes always go through the stores below. */
+    val expenseDao = database.expenseDao()
+    val categoryDao = database.categoryDao()
+    val friendDao = database.friendDao()
+
     /** Local write APIs. Application code uses these, never a raw DAO upsert. */
     val expenseStore = ExpenseStore(database.expenseDao(), transactions)
     val categoryStore = CategoryStore(database.categoryDao(), transactions)
     val friendStore = FriendStore(database.friendDao(), transactions)
+
+    /**
+     * Seeds the eight default categories on first run.
+     *
+     * Suspending and called from the activity rather than done in this
+     * constructor: the graph is built on the main thread, and a blocking
+     * database write there would be an ANR waiting to happen on a slow device.
+     */
+    suspend fun seedDefaultCategories() =
+        DefaultCategories.seedIfNeeded(database.categoryDao(), transactions)
 
     private val expenseCoordinator = ExpenseSyncCoordinator(
         dao = database.expenseDao(),

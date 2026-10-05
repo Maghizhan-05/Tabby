@@ -4,20 +4,16 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.maghizhan.tabby.data.QuickEntryLauncher
 import com.maghizhan.tabby.data.remote.OAuthCallback
 import com.maghizhan.tabby.ui.auth.AuthUiState
 import com.maghizhan.tabby.ui.auth.AuthViewModel
+import com.maghizhan.tabby.ui.nav.RootNav
 import com.maghizhan.tabby.ui.theme.TabbyTheme
 import kotlinx.coroutines.launch
 
@@ -58,33 +54,28 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Default categories are seeded before the UI needs them. Off the main
+        // thread, since this touches the database.
+        lifecycleScope.launch { graph.seedDefaultCategories() }
+
         setContent {
             TabbyTheme {
-                val state by authViewModel.uiState.collectAsState()
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // Checkpoint 2 is the data/auth layer; the real screens
-                        // arrive in the UI checkpoint. This renders the router's
-                        // resolved state so the three states are observable on
-                        // a device rather than only in tests.
-                        Text(
-                            text = when (state) {
-                                AuthUiState.Restoring -> "Tabby\nRestoring your session…"
-                                is AuthUiState.Authenticated -> "Tabby\nSigned in"
-                                is AuthUiState.SignedOut ->
-                                    (state as AuthUiState.SignedOut).error
-                                        ?.let { "Tabby\nSigned out — $it" }
-                                        ?: "Tabby\nSigned out"
-                            },
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
+                Surface(
+                    color = Color.Transparent,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    RootNav(
+                        graph = graph,
+                        authViewModel = authViewModel,
+                        syncScheduler = graph.syncScheduler
+                    )
                 }
             }
         }
+
+        // A launcher shortcut or widget tap. Handled alongside the OAuth
+        // callback because both arrive as intents on this same activity.
+        handleQuickEntry(intent)
 
         // The cold-start path: the app was launched BY the callback, so the
         // intent is already on the activity and onNewIntent will never fire for
@@ -98,6 +89,28 @@ class MainActivity : ComponentActivity() {
         // Keep the activity's own intent current so a later getIntent() sees it.
         setIntent(intent)
         handleCallback(intent)
+        handleQuickEntry(intent)
+    }
+
+    /**
+     * Routes a quick-entry request from the launcher shortcut or the widget.
+     *
+     * Matched on an explicit extra rather than a browsable URI: this path never
+     * needs to be reachable from a web redirect, and adding a second browsable
+     * host to the exported OAuth filter would widen the app's attack surface
+     * for no benefit.
+     */
+    private fun handleQuickEntry(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_QUICK_ENTRY, false) != true) return
+        // Consumed immediately: the intent is retained by the activity, and a
+        // sticky extra would reopen the sheet on every later rotation.
+        intent.removeExtra(EXTRA_QUICK_ENTRY)
+        QuickEntryLauncher.requestQuickEntry()
+    }
+
+    companion object {
+        /** Set by the launcher shortcut and the widget's tap action. */
+        const val EXTRA_QUICK_ENTRY = "com.maghizhan.tabby.extra.QUICK_ENTRY"
     }
 
     /**

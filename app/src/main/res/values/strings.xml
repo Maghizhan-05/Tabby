@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Tabby</string>
+    <string name="shortcut_log_expense_short">Log Expense</string>
+    <string name="shortcut_log_expense_long">Log a spend in Tabby</string>
+    <string name="widget_description">Today\'s spending, with one tap to log more.</string>
 </resources>

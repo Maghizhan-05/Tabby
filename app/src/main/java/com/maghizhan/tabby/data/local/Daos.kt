@@ -52,6 +52,17 @@ interface ExpenseDao {
     )
     fun observeVisible(ownerId: String, deletedState: Int = SyncState.DELETED.raw): Flow<List<ExpenseEntity>>
 
+    /**
+     * Every non-deleted expense, for the widget only.
+     *
+     * Unscoped by owner because the widget process has no session to scope it
+     * with. Safe on a single-account device, which is the only case the widget
+     * claims to serve; it is NOT a general-purpose read and the in-app screens
+     * must keep using [observeVisible].
+     */
+    @Query("SELECT * FROM expenses WHERE syncStateRaw != :deletedState ORDER BY date DESC")
+    suspend fun allVisible(deletedState: Int = SyncState.DELETED.raw): List<ExpenseEntity>
+
     /** Owner-scoped: a bare id lookup could surface another account's expense. */
     @Query(
         """
@@ -207,6 +218,38 @@ interface CategoryDao {
 
     @Query("SELECT * FROM categories WHERE id = :id")
     suspend fun byIdUnscoped(id: UUID): CategoryEntity?
+
+    /**
+     * Total row count, including tombstones and defaults.
+     *
+     * Used only by first-run seeding, which must distinguish "no categories have
+     * ever existed" from "the user deleted the defaults". A visibility-filtered
+     * count would read zero in the second case and re-seed rows the user
+     * deliberately removed.
+     */
+    @Query("SELECT COUNT(*) FROM categories")
+    suspend fun countAll(): Int
+
+    /**
+     * Every category row, including the shared seeded defaults.
+     *
+     * Unscoped because the defaults carry no owner, so an owner-scoped read
+     * cannot see them; used by seeding and by the picker, which must offer the
+     * defaults alongside the account's own categories.
+     */
+    @Query("SELECT * FROM categories ORDER BY sortOrder ASC")
+    suspend fun allUnscoped(): List<CategoryEntity>
+
+    /**
+     * Hard-deletes a seeded default.
+     *
+     * Defaults are the one category kind that may be erased rather than
+     * tombstoned: they have no remote counterpart (they are never pushed), so
+     * there is nothing for a tombstone to inform and nothing to resurrect them.
+     * Guarded by `isDefault = 1` so this can never erase user data.
+     */
+    @Query("DELETE FROM categories WHERE id = :id AND isDefault = 1")
+    suspend fun deleteDefaultById(id: UUID)
 
     @Query(
         """

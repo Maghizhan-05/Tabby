@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One static shortcut: "Log Expense". Static rather than dynamic so it exists
+  before the app has ever been launched — a dynamic shortcut must be published
+  by running code, which defeats the point of a cold-start entry point.
+
+  The extra is what MainActivity.handleQuickEntry matches on; see the manifest
+  comment for why this is not a browsable deep link.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="log-expense"
+        android:shortcutLongLabel="@string/shortcut_log_expense_long"
+        android:shortcutShortLabel="@string/shortcut_log_expense_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.maghizhan.tabby.MainActivity"
+            android:targetPackage="com.maghizhan.tabby">
+            <extra
+                android:name="com.maghizhan.tabby.extra.QUICK_ENTRY"
+                android:value="true" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

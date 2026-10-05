@@ -67,7 +67,12 @@ class AuthResilienceTest {
 
             val state = viewModel.uiState.value
             assertTrue("router must leave Restoring even when restore fails", state is AuthUiState.SignedOut)
-            assertEquals("token expired", (state as AuthUiState.SignedOut).error)
+            // The message is sanitised rather than passed through: a real client
+            // exception carries the request URL and bearer token, which must not
+            // reach the screen. The contract is "explained, not leaked".
+            val error = (state as AuthUiState.SignedOut).error
+            assertNotNull(error)
+            assertFalse("raw exception text must not reach the UI", error!!.contains("token expired"))
         }
 
     @Test

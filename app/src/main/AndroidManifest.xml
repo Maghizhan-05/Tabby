@@ -59,7 +59,39 @@
                     android:host="auth-callback"
                     android:scheme="com.maghizhan.tabby" />
             </intent-filter>
+
+            <!--
+              The launcher long-press shortcut ("Log Expense"), Android's closest
+              first-class equivalent to the iOS AppShortcut / Back-Tap binding.
+              There is no Back-Tap equivalent on Android.
+
+              Declared as meta-data rather than a second browsable intent-filter
+              on purpose: the shortcut launches MainActivity directly with
+              EXTRA_QUICK_ENTRY, so it needs no new exported URI surface. Adding
+              a browsable `quick-entry` host would let any web page open the
+              entry sheet, which buys nothing.
+            -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+
+        <!--
+          The home-screen widget. exported="false": only the system
+          AppWidgetHost needs to reach the receiver, and the broadcasts it
+          handles (update/delete/options-changed) all originate there.
+        -->
+        <receiver
+            android:name=".widget.TabbyWidgetReceiver"
+            android:exported="false"
+            android:label="Tabby">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tabby_widget_info" />
+        </receiver>
     </application>
 
 </manifest>

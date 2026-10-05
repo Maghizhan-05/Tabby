@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  minWidth/minHeight are the 2x1 cell minimums. targetCellWidth/Height (API 31+)
+  are the modern equivalents and are honoured in preference on newer launchers;
+  both are declared so the widget sizes correctly on older ones too.
+
+  updatePeriodMillis is 0: the system's minimum is 30 minutes, which is both too
+  slow to be useful and wasteful. The widget is refreshed by the app after a
+  write instead.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_description"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:minHeight="80dp"
+    android:minWidth="160dp"
+    android:previewImage="@mipmap/ic_launcher"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="1"
+    android:targetCellWidth="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />
