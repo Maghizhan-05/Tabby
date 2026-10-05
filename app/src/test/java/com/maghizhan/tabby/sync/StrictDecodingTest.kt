@@ -106,7 +106,7 @@ class StrictDecodingTest {
                 obj(
                     """
                     {"id":"22222222-2222-2222-2222-222222222222","user_id":"owner-a",
-                     "name":"Food","sort_order":"first"}
+                     "name":"Food","is_default":false,"sort_order":"first"}
                     """.trimIndent()
                 )
             )
@@ -116,13 +116,22 @@ class StrictDecodingTest {
         }
     }
 
+    /**
+     * `is_default` and `sort_order` are NOT NULL columns, so an absent value is
+     * a contract violation rather than something to default. Defaulting
+     * `is_default` to false turns a shared seeded category into a user-owned
+     * one, which then syncs and can be deleted for every account.
+     */
     @Test
-    fun `an absent boolean still uses its documented default`() {
-        val row = RemoteCategoryRow.from(
-            obj("""{"id":"22222222-2222-2222-2222-222222222222","user_id":"owner-a","name":"Food"}""")
-        )
-        assertEquals(false, row.isDefault)
-        assertEquals(0, row.sortOrder)
+    fun `an absent required category field is rejected`() {
+        try {
+            RemoteCategoryRow.from(
+                obj("""{"id":"22222222-2222-2222-2222-222222222222","user_id":"owner-a","name":"Food"}""")
+            )
+            fail("expected RowDecodingException")
+        } catch (e: RowDecodingException) {
+            assertTrue(e.message!!.contains("is_default"))
+        }
     }
 
     @Test

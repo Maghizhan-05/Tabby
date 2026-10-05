@@ -14,24 +14,26 @@ import java.util.UUID
  * RLS were misconfigured. A caller-supplied owner id was a confused-deputy hole:
  * a stale `ownerId` cached locally could be replayed against the backend.
  *
- * Fetches return [CompleteSnapshot], which can only be produced by paging to
- * termination — absence-based deletion is unsound against a partial result, and
- * the previous `isComplete` boolean could simply be ignored.
+ * [fetchAll] takes a [SessionBinding] instead, which is not an owner id but a
+ * pinned session the repository revalidates against. That is what lets the
+ * returned [CompleteSnapshot] carry proof of *which session* produced it, so an
+ * account switch mid-fetch is detected rather than silently reconciled into the
+ * wrong account's data.
  */
 interface ExpenseRepositoring {
-    suspend fun fetchAll(): CompleteSnapshot<RemoteExpenseRow>
+    suspend fun fetchAll(binding: SessionBinding): CompleteSnapshot<RemoteExpenseRow>
     suspend fun upsert(rows: List<RemoteExpenseRow>)
     suspend fun delete(ids: List<UUID>)
 }
 
 interface CategoryRepositoring {
-    suspend fun fetchAll(): CompleteSnapshot<RemoteCategoryRow>
+    suspend fun fetchAll(binding: SessionBinding): CompleteSnapshot<RemoteCategoryRow>
     suspend fun upsert(rows: List<RemoteCategoryRow>)
     suspend fun delete(ids: List<UUID>)
 }
 
 interface FriendRepositoring {
-    suspend fun fetchAll(): CompleteSnapshot<RemoteFriendRow>
+    suspend fun fetchAll(binding: SessionBinding): CompleteSnapshot<RemoteFriendRow>
     suspend fun upsert(rows: List<RemoteFriendRow>)
     suspend fun delete(ids: List<UUID>)
 }

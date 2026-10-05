@@ -1,6 +1,7 @@
 package com.maghizhan.tabby.sync
 
 import com.maghizhan.tabby.data.remote.model.LocalRecord
+import com.maghizhan.tabby.data.remote.ActiveSession
 import com.maghizhan.tabby.data.remote.CompleteSnapshot
 import com.maghizhan.tabby.data.remote.model.RemoteExpenseRow
 import com.maghizhan.tabby.data.sync.ExpenseReconciliation
@@ -300,7 +301,7 @@ class ExpenseReconciliationTest {
  * used here and the owner-filtering rules are driven by `activeOwnerId`.
  */
 private fun snapshot(vararg rows: RemoteExpenseRow): CompleteSnapshot<RemoteExpenseRow> =
-    CompleteSnapshot.forTesting(rows.toList(), ownerId = "snapshot-owner")
+    CompleteSnapshot.forTesting(rows.toList(), ActiveSession("snapshot-owner", 1))
 
 /**
  * A snapshot that could NOT be proven complete. Merges are still allowed from
@@ -309,6 +310,6 @@ private fun snapshot(vararg rows: RemoteExpenseRow): CompleteSnapshot<RemoteExpe
 private fun unprovenSnapshot(vararg rows: RemoteExpenseRow): CompleteSnapshot<RemoteExpenseRow> =
     CompleteSnapshot.forTesting(
         rows.toList(),
-        ownerId = "snapshot-owner",
+        ActiveSession("snapshot-owner", 1),
         authorizesAbsenceDeletion = false
     )

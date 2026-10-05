@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.maghizhan.tabby.data.remote.OAuthCallback
-import com.maghizhan.tabby.data.remote.SupabaseAuthService
 import com.maghizhan.tabby.ui.auth.AuthUiState
 import com.maghizhan.tabby.ui.auth.AuthViewModel
 import com.maghizhan.tabby.ui.theme.TabbyTheme
@@ -38,11 +37,26 @@ class MainActivity : ComponentActivity() {
      * update a state nobody is observing.
      */
     private val authViewModel: AuthViewModel by lazy {
-        AuthViewModel(SupabaseAuthService())
+        AuthViewModel(graph.authService)
     }
+
+    /** The application object graph; see [AppGraph] for what is wired to what. */
+    private val graph: AppGraph by lazy { AppGraph(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Sync runs when a session becomes available, which is the first moment
+        // it can: before this, local rows may exist that the backend has never
+        // seen. Collected for the activity's lifetime so a sign-in arriving
+        // later (OAuth callback, restored session) also triggers a run.
+        lifecycleScope.launch {
+            authViewModel.uiState.collect { state ->
+                if (state is AuthUiState.Authenticated) {
+                    graph.syncScheduler.onAuthenticated()
+                }
+            }
+        }
 
         setContent {
             TabbyTheme {
@@ -100,8 +114,9 @@ class MainActivity : ComponentActivity() {
         if (OAuthCallback.parse(url) is OAuthCallback.Result.NotACallback) return
 
         lifecycleScope.launch {
-            // Errors (denied consent, malformed callback) resolve the router to
-            // SignedOut with a reason instead of stranding the splash screen.
+            // handleOAuthCallback commits SignedOut(error) itself on failure, so
+            // the router always resolves; this catch only stops a callback
+            // failure from taking the activity down.
             runCatching { authViewModel.handleOAuthCallback(url) }
         }
     }

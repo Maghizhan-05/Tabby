@@ -362,4 +362,82 @@ class AuthResilienceTest {
         viewModel.handleOAuthCallback("com.maghizhan.tabby://auth-callback?code=abc")
         assertTrue(viewModel.uiState.value is AuthUiState.Authenticated)
     }
+
+    /**
+     * A FAILED callback exchange must resolve the router, not leave it in
+     * Restoring.
+     *
+     * This is the cold-start case: the app is launched BY the callback, so the
+     * restore and the callback race. The callback claims the newer intent, which
+     * means the restore's result is correctly rejected when it lands — so if the
+     * callback itself commits nothing on failure, nothing ever resolves and the
+     * user is stuck on the splash screen with no way forward.
+     */
+    @Test
+    fun `a failed cold-start callback resolves to SignedOut with a reason`() =
+        runTest(dispatcher) {
+            val restoreGate = CompletableDeferred<Unit>()
+            val service = object : AuthServicing {
+                override val isSupabaseConfigured = true
+                override val isGoogleProviderConfigured = true
+                override suspend fun currentSession(): AuthSession? {
+                    // Still restoring when the callback arrives, as on a cold start.
+                    restoreGate.await()
+                    return null
+                }
+                override suspend fun signInEmail(email: String, password: String) = error("unused")
+                override suspend fun signUpEmail(email: String, password: String) = error("unused")
+                override suspend fun beginGoogleSignIn() = Unit
+                override suspend fun completeOAuth(callbackUrl: String): AuthSession =
+                    throw IllegalStateException("PKCE exchange rejected")
+                override suspend fun signOut() = Unit
+            }
+
+            val viewModel = AuthViewModel(service)
+            advanceUntilIdle()
+            assertTrue(viewModel.uiState.value is AuthUiState.Restoring)
+
+            viewModel.handleOAuthCallback("com.maghizhan.tabby://auth-callback?code=bad")
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertTrue("a failed callback must resolve the router", state is AuthUiState.SignedOut)
+            assertNotNull(
+                "the user needs to be told why sign-in failed",
+                (state as AuthUiState.SignedOut).error
+            )
+
+            // The superseded restore must not then overwrite the failure.
+            restoreGate.complete(Unit)
+            viewModel.restoreJob.join()
+            advanceUntilIdle()
+            assertNotNull((viewModel.uiState.value as AuthUiState.SignedOut).error)
+        }
+
+    @Test
+    fun `a newer sign-out is not overwritten by a failing callback`() = runTest(dispatcher) {
+        val service = object : AuthServicing {
+            override val isSupabaseConfigured = true
+            override val isGoogleProviderConfigured = true
+            override suspend fun currentSession(): AuthSession? = null
+            override suspend fun signInEmail(email: String, password: String) = error("unused")
+            override suspend fun signUpEmail(email: String, password: String) = error("unused")
+            override suspend fun beginGoogleSignIn() = Unit
+            override suspend fun completeOAuth(callbackUrl: String): AuthSession =
+                throw IllegalStateException("denied")
+            override suspend fun signOut() = Unit
+        }
+
+        val viewModel = AuthViewModel(service)
+        viewModel.restoreJob.join()
+
+        val callback = launch {
+            viewModel.handleOAuthCallback("com.maghizhan.tabby://auth-callback?code=bad")
+        }
+        viewModel.signOut()
+        callback.join()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is AuthUiState.SignedOut)
+    }
 }

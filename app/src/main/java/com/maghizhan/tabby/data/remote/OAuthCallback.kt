@@ -51,11 +51,26 @@ object OAuthCallback {
         val prefix = "$SCHEME://$HOST"
         if (!url.startsWith(prefix, ignoreCase = true)) return Result.NotACallback
 
-        // Only a path/query/fragment boundary may follow the host, so a
-        // look-alike host such as `auth-callback.evil.test` is rejected.
-        val remainder = url.substring(prefix.length)
+        var remainder = url.substring(prefix.length)
+
+        // Exact authority: no port, and no look-alike host such as
+        // `auth-callback.evil.test`. Only a path/query/fragment boundary may
+        // follow the host.
         if (remainder.isNotEmpty() && remainder.first() !in listOf('/', '?', '#')) {
             return Result.NotACallback
+        }
+
+        // Exact path. The registered redirect has NO path, so the only
+        // acceptable forms are the bare host or a single trailing slash.
+        // Accepting arbitrary paths widened the identity we answer to beyond
+        // what is actually registered, which means a URL we never published
+        // would still be honoured.
+        if (remainder.startsWith("/")) {
+            val pathEnd = remainder.indexOfFirst { it == '?' || it == '#' }
+                .let { if (it == -1) remainder.length else it }
+            val path = remainder.substring(0, pathEnd)
+            if (path != "/") return Result.NotACallback
+            remainder = remainder.substring(pathEnd)
         }
 
         val parameters = parseParameters(remainder)

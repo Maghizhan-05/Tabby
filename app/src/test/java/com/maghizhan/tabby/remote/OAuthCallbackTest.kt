@@ -19,9 +19,37 @@ class OAuthCallbackTest {
     }
 
     @Test
-    fun `a callback with a path still yields its code`() {
+    fun `a bare trailing slash still yields its code`() {
         val result = OAuthCallback.parse("com.maghizhan.tabby://auth-callback/?code=abc123")
         assertEquals(OAuthCallback.Result.Code("abc123"), result)
+    }
+
+    /**
+     * The registered redirect has NO path, so answering to arbitrary paths
+     * widens our accepted identity beyond what was ever published.
+     */
+    @Test
+    fun `an unregistered path is rejected`() {
+        assertEquals(
+            OAuthCallback.Result.NotACallback,
+            OAuthCallback.parse("com.maghizhan.tabby://auth-callback/evil?code=abc123")
+        )
+    }
+
+    @Test
+    fun `a nested unregistered path is rejected`() {
+        assertEquals(
+            OAuthCallback.Result.NotACallback,
+            OAuthCallback.parse("com.maghizhan.tabby://auth-callback/a/b?code=abc123")
+        )
+    }
+
+    @Test
+    fun `an explicit port is rejected`() {
+        assertEquals(
+            OAuthCallback.Result.NotACallback,
+            OAuthCallback.parse("com.maghizhan.tabby://auth-callback:8080?code=abc123")
+        )
     }
 
     @Test

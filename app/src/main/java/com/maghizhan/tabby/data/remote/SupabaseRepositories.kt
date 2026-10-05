@@ -27,8 +27,10 @@ import java.util.UUID
  *    `ownerId` cached locally could otherwise be used to read or write another
  *    account's rows, with RLS as the only thing standing in the way.
  *
- * 2. **Completeness is proved by an exact server-side count, not by a short
- *    page.** See [fetchComplete].
+ * 2. **Completeness is decided by [CompleteSnapshot.fetch], not here.** This
+ *    class only knows how to request one page and report the exact count the
+ *    same statement returned; whether that constitutes proof is the snapshot's
+ *    rule, so a repository cannot declare its own result complete.
  *
  * 3. **Money is validated again at the upload boundary**, because the backend
  *    column is the constraint that actually matters and a row may have been
@@ -43,41 +45,25 @@ abstract class SupabaseRepository(private val table: String) {
         SupabaseClientProvider.currentUserId() ?: throw NotAuthenticatedException()
 
     /**
-     * Fetches every row for the authenticated user and proves the result is
-     * complete by comparing it against an exact server-side count.
+     * Requests rows for the authenticated user and hands them to
+     * [CompleteSnapshot.fetch], which decides whether the result is provably
+     * complete.
      *
-     * Why not "page until a short page arrives": offset ranges are evaluated
-     * against a *different* server statement on each request. If a row in an
-     * earlier page is deleted between requests, every later row shifts down one
-     * offset and exactly one row is never returned — and because the snapshot
-     * then looks complete, reconciliation reads that skipped row as deleted
-     * remotely and destroys it locally. Ordering by an immutable `id` does not
-     * help: the problem is the shifting offset window, not the sort key.
-     *
-     * The fix is to make completeness checkable rather than assumed. PostgREST
-     * returns an exact total alongside the rows (`Count.EXACT`), so:
-     *
-     * - rows gathered == the reported total -> provably complete, and absence
-     *   deletion is authorised.
-     * - anything else (rows missing, a count that moved mid-fetch, the page
-     *   ceiling hit) -> NOT complete, and the snapshot is marked partial so
-     *   reconciliation performs non-destructive merges only.
-     *
-     * A concurrent delete therefore degrades to "merge but do not delete this
-     * cycle" and self-corrects next cycle, instead of destroying a row.
+     * Ordered by the immutable `id` so a page is at least internally
+     * deterministic. Ordering does NOT make multi-request paging complete,
+     * though: equal-cardinality churn between requests (one early row deleted,
+     * one later row inserted) skips a row while the total stays put, and
+     * duplicate ids across overlapping pages pad the count back up. Both forge
+     * a false proof, which is why the snapshot refuses to call any multi-request
+     * result proven and rejects duplicates outright.
      */
-    protected suspend fun <T> fetchComplete(decode: (JsonElement) -> List<T>): CompleteSnapshot<T> {
+    protected suspend fun <T> fetchSnapshot(
+        binding: SessionBinding,
+        idOf: (T) -> Any,
+        decode: (JsonElement) -> List<T>
+    ): CompleteSnapshot<T> {
         val userId = requireUserId()
-
-        val rows = mutableListOf<T>()
-        var expectedTotal: Long? = null
-        var pages = 0
-        var countStable = true
-
-        while (pages < CompleteSnapshot.MAXIMUM_PAGES) {
-            val from = pages.toLong() * PAGE_SIZE
-            val to = from + PAGE_SIZE - 1
-
+        return CompleteSnapshot.fetch(binding, idOf) { from, to ->
             val response = client.from(table).select {
                 filter { eq("user_id", userId) }
                 order(column = "id", order = Order.ASCENDING)
@@ -85,33 +71,10 @@ abstract class SupabaseRepository(private val table: String) {
                 // Exact total for THIS filter, returned with the page.
                 count(Count.EXACT)
             }
-
-            val total = response.countOrNull()
-            if (expectedTotal == null) {
-                expectedTotal = total
-            } else if (total != null && total != expectedTotal) {
-                // The table changed underneath us; this fetch cannot be proved
-                // complete, so it must not authorise deletions.
-                countStable = false
-            }
-
-            val page = decode(Json.parseToJsonElement(response.data))
-            rows += page
-            pages++
-
-            if (page.size < PAGE_SIZE) break
-            if (expectedTotal != null && rows.size >= expectedTotal) break
-        }
-
-        val proved = countStable &&
-            expectedTotal != null &&
-            rows.size.toLong() == expectedTotal &&
-            pages < CompleteSnapshot.MAXIMUM_PAGES
-
-        return if (proved) {
-            CompleteSnapshot.proved(rows = rows, ownerId = userId, pagesFetched = pages)
-        } else {
-            CompleteSnapshot.partial(rows = rows, ownerId = userId, pagesFetched = pages)
+            CompleteSnapshot.Page(
+                rows = decode(Json.parseToJsonElement(response.data)),
+                exactTotal = response.countOrNull()
+            )
         }
     }
 
@@ -135,20 +98,12 @@ abstract class SupabaseRepository(private val table: String) {
             }
         }
     }
-
-    companion object {
-        /**
-         * Rows per request. Below Supabase's default 1000-row cap, so a page is
-         * never silently truncated by the server.
-         */
-        const val PAGE_SIZE = 500L
-    }
 }
 
 class SupabaseExpenseRepository : SupabaseRepository("expenses"), ExpenseRepositoring {
 
-    override suspend fun fetchAll(): CompleteSnapshot<RemoteExpenseRow> =
-        fetchComplete { RemoteExpenseRow.list(it) }
+    override suspend fun fetchAll(binding: SessionBinding): CompleteSnapshot<RemoteExpenseRow> =
+        fetchSnapshot(binding, { it.id }) { RemoteExpenseRow.list(it) }
 
     override suspend fun upsert(rows: List<RemoteExpenseRow>) {
         val userId = requireUserId()
@@ -177,8 +132,8 @@ class SupabaseExpenseRepository : SupabaseRepository("expenses"), ExpenseReposit
 
 class SupabaseCategoryRepository : SupabaseRepository("categories"), CategoryRepositoring {
 
-    override suspend fun fetchAll(): CompleteSnapshot<RemoteCategoryRow> =
-        fetchComplete { RemoteCategoryRow.list(it) }
+    override suspend fun fetchAll(binding: SessionBinding): CompleteSnapshot<RemoteCategoryRow> =
+        fetchSnapshot(binding, { it.id }) { RemoteCategoryRow.list(it) }
 
     override suspend fun upsert(rows: List<RemoteCategoryRow>) {
         val userId = requireUserId()
@@ -198,8 +153,8 @@ class SupabaseCategoryRepository : SupabaseRepository("categories"), CategoryRep
 
 class SupabaseFriendRepository : SupabaseRepository("friends"), FriendRepositoring {
 
-    override suspend fun fetchAll(): CompleteSnapshot<RemoteFriendRow> =
-        fetchComplete { RemoteFriendRow.list(it) }
+    override suspend fun fetchAll(binding: SessionBinding): CompleteSnapshot<RemoteFriendRow> =
+        fetchSnapshot(binding, { it.id }) { RemoteFriendRow.list(it) }
 
     override suspend fun upsert(rows: List<RemoteFriendRow>) {
         val userId = requireUserId()

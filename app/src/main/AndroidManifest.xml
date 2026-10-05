@@ -38,6 +38,23 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <!--
+                  Scheme and host only, deliberately.
+
+                  Within a single intent-filter Android merges every <data>
+                  attribute into a union, so declaring ANY android:path makes a
+                  path mandatory — and the redirect Supabase actually sends
+                  (`com.maghizhan.tabby://auth-callback`) carries no path at all,
+                  so it would stop resolving. Verified on a device: with a path
+                  declared, `resolve-activity` on the bare form returns
+                  "No activity found".
+
+                  Exactness is therefore enforced in code, where it CAN be
+                  expressed precisely: OAuthCallback.parse accepts only the bare
+                  host or a single trailing slash and rejects any other path,
+                  port or look-alike host. The filter is the coarse door; the
+                  parser is the lock.
+                -->
                 <data
                     android:host="auth-callback"
                     android:scheme="com.maghizhan.tabby" />

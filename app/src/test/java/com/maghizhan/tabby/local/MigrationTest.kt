@@ -6,7 +6,9 @@ import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
+import com.maghizhan.tabby.data.local.ALL_MIGRATIONS
 import com.maghizhan.tabby.data.local.MIGRATION_1_2
+import com.maghizhan.tabby.data.local.MIGRATION_2_3
 import com.maghizhan.tabby.data.local.TabbyDatabase
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -123,13 +125,84 @@ class MigrationTest {
 
         val context = ApplicationProvider.getApplicationContext<Context>()
         val database = Room.databaseBuilder(context, TabbyDatabase::class.java, databaseName)
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(*ALL_MIGRATIONS)
             .allowMainThreadQueries()
             .build()
 
-        // Forces the open; throws if the migration is missing or wrong.
+        // Forces the open; throws if any migration in the chain is missing or wrong.
         assertTrue(database.openHelper.writableDatabase.isOpen)
-        assertEquals(2, database.openHelper.writableDatabase.version)
+        assertEquals(3, database.openHelper.writableDatabase.version)
         database.close()
+    }
+
+    /**
+     * v2 -> v3 adds `revision` to categories and friends.
+     *
+     * Compare-and-set acknowledgement reads that column, so a v2 database
+     * reaching the new code without it would fail every acknowledgement.
+     */
+    @Test
+    fun `v2 to v3 adds the revision column to categories and friends`() {
+        helper.createDatabase(databaseName, 2).close()
+        val migrated = helper.runMigrationsAndValidate(databaseName, 3, true, MIGRATION_2_3)
+
+        for (table in listOf("categories", "friends")) {
+            migrated.query("SELECT name FROM pragma_table_info('$table')").use { cursor ->
+                val columns = mutableSetOf<String>()
+                while (cursor.moveToNext()) columns += cursor.getString(0)
+                assertTrue("$table is missing revision", columns.contains("revision"))
+            }
+        }
+    }
+
+    /** Existing category rows must survive and default to revision 0. */
+    @Test
+    fun `v2 category rows are preserved across the v3 migration`() {
+        val id = UUID.randomUUID().toString()
+
+        helper.createDatabase(databaseName, 2).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO categories
+                    (id, name, isDefault, sortOrder, syncStateRaw, remoteId, ownerId)
+                VALUES ('$id', 'Coffee', 0, 3, 0, NULL, 'owner-a')
+                """.trimIndent()
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(databaseName, 3, true, MIGRATION_2_3)
+
+        migrated.query("SELECT name, sortOrder, revision FROM categories WHERE id = '$id'").use { c ->
+            assertTrue("the category row was lost", c.moveToFirst())
+            assertEquals("Coffee", c.getString(0))
+            assertEquals(3, c.getInt(1))
+            assertEquals(0, c.getInt(2))
+        }
+    }
+
+    /** The whole chain, as an upgrading device actually experiences it. */
+    @Test
+    fun `a v1 database migrates all the way to v3`() {
+        val id = UUID.randomUUID().toString()
+        val millis = 1_767_225_600_000L
+
+        helper.createDatabase(databaseName, 1).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO expenses
+                    (id, amount, categoryName, note, date, createdAt, updatedAt,
+                     syncStateRaw, remoteId, ownerId, revision)
+                VALUES ('$id', '42.00', 'Coffee', NULL, $millis, $millis, $millis, 0, NULL, 'owner-a', 0)
+                """.trimIndent()
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(databaseName, 3, true, *ALL_MIGRATIONS)
+
+        migrated.query("SELECT amount, updatedAt FROM expenses WHERE id = '$id'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("42.00", c.getString(0))
+            assertEquals(millis * 1000, c.getLong(1))
+        }
     }
 }

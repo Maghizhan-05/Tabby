@@ -26,7 +26,7 @@ import com.maghizhan.tabby.data.local.entity.UserProfileEntity
         FriendEntity::class,
         UserProfileEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -56,7 +56,7 @@ abstract class TabbyDatabase : RoomDatabase() {
                     // pushed yet exist nowhere else. A missing migration must
                     // fail loudly in development rather than quietly wipe data
                     // on a user's device.
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(*ALL_MIGRATIONS)
                     .build()
                     .also { instance = it }
             }

@@ -64,7 +64,9 @@ data class CategoryEntity(
     val syncStateRaw: Int,
     val remoteId: String?,
     /** Null for the seeded defaults and for legacy pre-partitioning rows. */
-    val ownerId: String?
+    val ownerId: String?,
+    /** See [ExpenseEntity.revision]: required for compare-and-set acknowledgement. */
+    val revision: Int = 0
 ) {
     val syncState: SyncState get() = SyncState.fromRaw(syncStateRaw)
 }
@@ -79,7 +81,9 @@ data class FriendEntity(
     val createdAt: Instant,
     val updatedAt: Instant,
     val syncStateRaw: Int,
-    val remoteId: String? = null
+    val remoteId: String? = null,
+    /** See [ExpenseEntity.revision]: required for compare-and-set acknowledgement. */
+    val revision: Int = 0
 ) {
     val syncState: SyncState get() = SyncState.fromRaw(syncStateRaw)
 

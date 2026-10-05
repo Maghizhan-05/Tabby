@@ -130,6 +130,31 @@ internal object RowDecoding {
             ?: throw RowDecodingException("Not an integer: $key=${primitive.content}")
     }
 
+    /**
+     * A required boolean: absent or JSON-null throws. Use this for non-null
+     * schema columns, where a default would invent data the backend never sent.
+     */
+    fun requiredBoolean(row: JsonObject, key: String): Boolean {
+        val primitive = primitiveOrNull(row, key)
+            ?: throw RowDecodingException("Missing field: $key")
+        if (primitive.isString) {
+            throw RowDecodingException("Not a boolean (quoted string): $key=${primitive.content}")
+        }
+        return primitive.content.toBooleanStrictOrNull()
+            ?: throw RowDecodingException("Not a boolean: $key=${primitive.content}")
+    }
+
+    /** A required integer: absent or JSON-null throws. See [requiredBoolean]. */
+    fun requiredInt(row: JsonObject, key: String): Int {
+        val primitive = primitiveOrNull(row, key)
+            ?: throw RowDecodingException("Missing field: $key")
+        if (primitive.isString) {
+            throw RowDecodingException("Not an integer (quoted string): $key=${primitive.content}")
+        }
+        return primitive.content.toIntOrNull()
+            ?: throw RowDecodingException("Not an integer: $key=${primitive.content}")
+    }
+
     fun <T> array(element: JsonElement, decode: (JsonObject) -> T): List<T> {
         val array = element as? JsonArray ?: throw RowDecodingException("Not an array")
         return array.map { decode(obj(it, "row")) }
@@ -179,8 +204,13 @@ data class RemoteCategoryRow(
             id = RowDecoding.uuid(row, "id"),
             userId = RowDecoding.string(row, "user_id"),
             name = RowDecoding.string(row, "name"),
-            isDefault = RowDecoding.boolean(row, "is_default", default = false),
-            sortOrder = RowDecoding.int(row, "sort_order", default = 0)
+            // Required, non-null columns in the shared schema, so an absent or
+            // JSON-null value is a contract violation rather than something to
+            // paper over with a default. Defaulting `is_default` to false would
+            // silently convert a shared seeded category into a user-owned one
+            // that then syncs and can be deleted for everyone.
+            isDefault = RowDecoding.requiredBoolean(row, "is_default"),
+            sortOrder = RowDecoding.requiredInt(row, "sort_order")
         )
 
         fun list(element: JsonElement): List<RemoteCategoryRow> =
@@ -231,5 +261,10 @@ data class LocalRecord(
      * Only such a record may be deleted by absence: for a row that never reached
      * the backend, absence tells us nothing.
      */
-    val hasRemoteIdentity: Boolean = false
+    val hasRemoteIdentity: Boolean = false,
+    /**
+     * True for records shared across accounts (the seeded default categories).
+     * These are never pushed, pulled, or deleted by absence.
+     */
+    val isShared: Boolean = false
 )

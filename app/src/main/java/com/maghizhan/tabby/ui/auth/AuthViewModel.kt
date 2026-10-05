@@ -115,9 +115,28 @@ class AuthViewModel(
     /**
      * Completes the OAuth round-trip from the callback URL. This is the call
      * that actually authenticates, by exchanging the PKCE code for a session.
+     *
+     * A FAILED exchange must commit `SignedOut(error)` rather than leaving the
+     * router untouched. The callback claims the newest intent, which rejects the
+     * older restore when it lands — so committing nothing on failure strands the
+     * user on the splash screen permanently, with no path forward. That is worse
+     * than the original login flash, and it is specific to the callback path:
+     * for an in-app sign-in the previous state is still meaningful, but here the
+     * restore that would have produced one has already been superseded.
      */
-    suspend fun handleOAuthCallback(callbackUrl: String) =
-        authenticate { authService.completeOAuth(callbackUrl) }
+    suspend fun handleOAuthCallback(callbackUrl: String) {
+        val intent = beginIntent()
+        val next = try {
+            AuthUiState.Authenticated(authService.completeOAuth(callbackUrl))
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            AuthUiState.SignedOut(
+                error = error.message ?: "Could not complete sign-in."
+            )
+        }
+        commit(intent, next)
+    }
 
     suspend fun signOut() {
         val intent = beginIntent()

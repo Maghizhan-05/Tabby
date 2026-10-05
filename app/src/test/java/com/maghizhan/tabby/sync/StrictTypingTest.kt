@@ -24,6 +24,42 @@ class StrictTypingTest {
 
     private val id = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
 
+    /**
+     * `is_default` and `sort_order` are NOT NULL columns, so an absent or null
+     * value means the backend sent something the schema forbids. Defaulting it
+     * silently converts a shared seeded category into a user-owned one, which
+     * then syncs and can be deleted for every account.
+     */
+    @Test
+    fun `an absent required category field is rejected`() {
+        val error = assertThrows(RowDecodingException::class.java) {
+            RemoteCategoryRow.from(
+                row("""{"id":"$id","user_id":"owner-a","name":"Food","sort_order":2}""")
+            )
+        }
+        assertEquals(true, error.message!!.contains("is_default"))
+    }
+
+    @Test
+    fun `a JSON-null required category field is rejected`() {
+        val error = assertThrows(RowDecodingException::class.java) {
+            RemoteCategoryRow.from(
+                row("""{"id":"$id","user_id":"owner-a","name":"Food","is_default":null,"sort_order":2}""")
+            )
+        }
+        assertEquals(true, error.message!!.contains("is_default"))
+    }
+
+    @Test
+    fun `an absent required sort order is rejected`() {
+        val error = assertThrows(RowDecodingException::class.java) {
+            RemoteCategoryRow.from(
+                row("""{"id":"$id","user_id":"owner-a","name":"Food","is_default":false}""")
+            )
+        }
+        assertEquals(true, error.message!!.contains("sort_order"))
+    }
+
     @Test
     fun `a genuine boolean is accepted`() {
         val decoded = RemoteCategoryRow.from(
@@ -82,13 +118,5 @@ class StrictTypingTest {
         assertEquals("12.34", decoded.amount.toPlainString())
     }
 
-    /** Absent optional fields still fall back to their documented default. */
-    @Test
-    fun `an absent boolean uses its default`() {
-        val decoded = RemoteCategoryRow.from(
-            row("""{"id":"$id","user_id":"owner-a","name":"Food"}""")
-        )
-        assertEquals(false, decoded.isDefault)
-        assertEquals(0, decoded.sortOrder)
-    }
+
 }

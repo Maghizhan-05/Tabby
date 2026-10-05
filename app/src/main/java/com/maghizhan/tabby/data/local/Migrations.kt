@@ -53,3 +53,24 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         )
     }
 }
+
+/**
+ * v2 -> v3: adds `revision` to `categories` and `friends`.
+ *
+ * Compare-and-set acknowledgement needs a revision on every synced table.
+ * Without it, a push that completes while the user edits the same category or
+ * friend clears the pending flag and the edit is never uploaded — it looks saved
+ * and silently is not. Expenses already had the column; these two did not.
+ *
+ * Existing rows default to 0, which is correct: they have never been through a
+ * CAS acknowledgement, so any first comparison against 0 is accurate.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE categories ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE friends ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/** Every migration, in order, for the production builder and the migration tests. */
+val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)

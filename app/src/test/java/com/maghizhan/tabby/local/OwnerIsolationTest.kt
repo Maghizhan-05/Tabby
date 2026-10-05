@@ -131,10 +131,25 @@ class OwnerIsolationTest {
         assertNotNull(db.friendDao().byId(foreign, ownerB))
     }
 
+    /**
+     * An unclaimed row is now invisible until a cycle claims it.
+     *
+     * This replaces the old rule that `ownerId IS NULL` was readable by whoever
+     * asked. That made a legacy row visible to EVERY account, so a second user on
+     * the device could see and sync the first user's pre-sign-in expenses. The
+     * row is adopted by `claimLegacyRows` at the start of a cycle instead, which
+     * is a single atomic statement and therefore cannot be raced.
+     */
     @Test
-    fun `unclaimed rows remain visible so they can be claimed on first sign-in`() = runTest {
+    fun `an unclaimed row is invisible until it is claimed`() = runTest {
         db.expenseDao().upsert(listOf(expense(owner = null)))
+        assertTrue(db.expenseDao().observeVisible(ownerA).first().isEmpty())
+
+        assertEquals(1, db.expenseDao().claimLegacyRows(ownerA))
         assertEquals(1, db.expenseDao().observeVisible(ownerA).first().size)
+
+        // ...and only for the account that claimed it.
+        assertTrue(db.expenseDao().observeVisible(ownerB).first().isEmpty())
     }
 
     // MARK: - Tombstones

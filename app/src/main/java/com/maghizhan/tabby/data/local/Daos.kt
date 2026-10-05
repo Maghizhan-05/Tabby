@@ -14,22 +14,30 @@ import java.util.UUID
 /**
  * DAOs.
  *
- * Two invariants hold for EVERY account-sensitive query, reads and deletes
- * alike, mirroring the iOS `ExpenseOwnership.visibleExpenses` rule:
+ * Three invariants hold for every account-sensitive statement:
  *
- * 1. **Owner scoping.** Every statement requires the active owner id. The local
- *    database can hold rows for more than one account (a sign-out leaves the
- *    previous account's cache behind), so an unscoped `WHERE id = :id` would
- *    read, upload or delete another account's record. `ownerId IS NULL` is
- *    matched deliberately and only so pre-sign-in rows can still be claimed by
- *    the first account that signs in — see `Ownership.claimed`.
+ * 1. **Exact-owner scoping.** Every predicate matches `LOWER(ownerId) =
+ *    LOWER(:ownerId)` and nothing else. Earlier versions also matched
+ *    `ownerId IS NULL` so pre-sign-in rows could be adopted, but that made an
+ *    unclaimed row readable and processable by *every* account in turn: sign out,
+ *    sign in as someone else, and the first user's unsynced expense was visible
+ *    and would be uploaded under the second account. Legacy rows are now adopted
+ *    by [ExpenseDao.claimLegacyRows] at the start of a cycle — an explicit,
+ *    atomic, one-time transfer — after which only exact-owner predicates apply.
  *
  * 2. **Tombstones are invisible.** A DELETED row is pending remote deletion and
  *    must not appear in any list, for any entity type.
  *
+ * 3. **Acknowledgement is compare-and-set.** See [ExpenseDao.markSyncedIfUnchanged].
+ *
  * Deletes are id-scoped AND owner-scoped: an id alone is attacker- or
- * bug-controlled, and `DELETE ... WHERE id IN (:ids)` would happily erase a row
- * belonging to someone else.
+ * bug-controlled, and `DELETE ... WHERE id IN (:ids)` would erase another
+ * account's row.
+ *
+ * These DAOs are internal to the data layer. Application code writes through
+ * `ExpenseStore`/`CategoryStore`/`FriendStore`, which own the authorise-then-
+ * persist transaction; a raw `@Upsert` cannot check an existing row's owner
+ * because INSERT has no WHERE clause.
  */
 @Dao
 interface ExpenseDao {
@@ -38,7 +46,7 @@ interface ExpenseDao {
         """
         SELECT * FROM expenses
         WHERE syncStateRaw != :deletedState
-          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+          AND LOWER(ownerId) = LOWER(:ownerId)
         ORDER BY date DESC
         """
     )
@@ -49,15 +57,27 @@ interface ExpenseDao {
         """
         SELECT * FROM expenses
         WHERE id = :id
-          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+          AND LOWER(ownerId) = LOWER(:ownerId)
         """
     )
     suspend fun byId(id: UUID, ownerId: String): ExpenseEntity?
 
+    /**
+     * Reads a row by id with NO owner predicate.
+     *
+     * Used only by the store's authorise-then-persist transaction, to discover
+     * whether an incoming row's UUID already belongs to a different account. An
+     * owner-scoped read cannot answer that question: it returns null both when
+     * the row is absent and when it belongs to someone else, and treating those
+     * the same lets an upsert overwrite a foreign row.
+     */
+    @Query("SELECT * FROM expenses WHERE id = :id")
+    suspend fun byIdUnscoped(id: UUID): ExpenseEntity?
+
     @Query(
         """
         SELECT * FROM expenses
-        WHERE ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId)
+        WHERE LOWER(ownerId) = LOWER(:ownerId)
         """
     )
     suspend fun allForOwner(ownerId: String): List<ExpenseEntity>
@@ -70,44 +90,89 @@ interface ExpenseDao {
         """
         SELECT * FROM expenses
         WHERE syncStateRaw != :syncedState
-          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+          AND LOWER(ownerId) = LOWER(:ownerId)
         """
     )
     suspend fun pendingPush(ownerId: String, syncedState: Int = SyncState.SYNCED.raw): List<ExpenseEntity>
 
     /**
-     * Raw primary-key upsert. INSERT has no WHERE clause, so owner scoping is
-     * impossible here: callers MUST route rows through
-     * [com.maghizhan.tabby.data.local.WriteGuard] first, which asserts the
-     * active session owns the record and normalizes its money. Only the sync
-     * coordinator and the guarded write APIs below call this.
+     * Adopts rows written before any account existed, assigning them to
+     * [ownerId]. Returns the number claimed.
+     *
+     * One atomic statement, and only `ownerId IS NULL` is touched, so it can
+     * never move a row between two real accounts. Run once per cycle before
+     * anything else reads: afterwards every predicate is exact-owner, and an
+     * unclaimed row is invisible to everyone rather than visible to everyone.
      */
+    @Query("UPDATE expenses SET ownerId = :ownerId WHERE ownerId IS NULL")
+    suspend fun claimLegacyRows(ownerId: String): Int
+
+    /** Internal: the store owns the authorise-then-persist transaction. */
     @Upsert
     suspend fun upsert(expenses: List<ExpenseEntity>)
 
     /**
-     * Marks pushed rows SYNCED, owner-scoped so a push cannot clear another
-     * account's pending state.
+     * Compare-and-set acknowledgement. Returns the number of rows updated.
+     *
+     * Marking a row SYNCED by id and owner alone loses concurrent work: the
+     * coordinator reads pending rows, performs network I/O, then acknowledges —
+     * and an edit the user made *during* that upload is silently cleared, so the
+     * change is never uploaded and looks saved. Requiring the revision and state
+     * to be exactly what was uploaded means a row touched meanwhile simply does
+     * not match, stays pending, and goes up next cycle.
+     *
+     * The revision is bumped so a second acknowledgement of the same upload
+     * cannot match again.
      */
     @Query(
         """
         UPDATE expenses
-        SET syncStateRaw = :syncedState, remoteId = CAST(id AS TEXT)
-        WHERE id IN (:ids)
-          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+        SET syncStateRaw = :syncedState,
+            remoteId = CAST(id AS TEXT),
+            revision = revision + 1
+        WHERE id = :id
+          AND LOWER(ownerId) = LOWER(:ownerId)
+          AND revision = :expectedRevision
+          AND syncStateRaw = :expectedState
         """
     )
-    suspend fun markSynced(
-        ids: List<UUID>,
+    suspend fun markSyncedIfUnchanged(
+        id: UUID,
         ownerId: String,
+        expectedRevision: Int,
+        expectedState: Int,
         syncedState: Int = SyncState.SYNCED.raw
+    ): Int
+
+    /**
+     * Compare-and-set tombstone removal. Returns the number of rows deleted.
+     *
+     * A tombstone is only physically removed if it is still the exact tombstone
+     * that was deleted remotely. Without the revision and state check, a row
+     * resurrected or re-edited during the remote delete would be destroyed along
+     * with it.
+     */
+    @Query(
+        """
+        DELETE FROM expenses
+        WHERE id = :id
+          AND LOWER(ownerId) = LOWER(:ownerId)
+          AND revision = :expectedRevision
+          AND syncStateRaw = :expectedState
+        """
     )
+    suspend fun deleteTombstoneIfUnchanged(
+        id: UUID,
+        ownerId: String,
+        expectedRevision: Int,
+        expectedState: Int = SyncState.DELETED.raw
+    ): Int
 
     @Query(
         """
         DELETE FROM expenses
         WHERE id IN (:ids)
-          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+          AND LOWER(ownerId) = LOWER(:ownerId)
         """
     )
     suspend fun deleteByIds(ids: List<UUID>, ownerId: String)
@@ -117,16 +182,16 @@ interface ExpenseDao {
 interface CategoryDao {
 
     /**
-     * Default categories are shared (no owner), so they are always visible;
-     * user categories are owner-scoped. DELETED tombstones are excluded here
-     * just as for expenses and friends — a category the user deleted must not
-     * reappear in the picker while its deletion is still pending.
+     * Default categories are shared (no owner) and always visible; user
+     * categories are exact-owner scoped. DELETED tombstones are excluded just as
+     * for expenses and friends — a category the user deleted must not reappear
+     * in the picker while its deletion is still pending.
      */
     @Query(
         """
         SELECT * FROM categories
         WHERE syncStateRaw != :deletedState
-          AND (isDefault = 1 OR ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+          AND (isDefault = 1 OR LOWER(ownerId) = LOWER(:ownerId))
         ORDER BY sortOrder ASC, name ASC
         """
     )
@@ -135,39 +200,71 @@ interface CategoryDao {
     @Query(
         """
         SELECT * FROM categories
-        WHERE isDefault = 1 OR ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId)
+        WHERE isDefault = 1 OR LOWER(ownerId) = LOWER(:ownerId)
         """
     )
     suspend fun allForOwner(ownerId: String): List<CategoryEntity>
+
+    @Query("SELECT * FROM categories WHERE id = :id")
+    suspend fun byIdUnscoped(id: UUID): CategoryEntity?
 
     @Query(
         """
         SELECT * FROM categories
         WHERE syncStateRaw != :syncedState
           AND isDefault = 0
-          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+          AND LOWER(ownerId) = LOWER(:ownerId)
         """
     )
     suspend fun pendingPush(ownerId: String, syncedState: Int = SyncState.SYNCED.raw): List<CategoryEntity>
 
-    /** See [ExpenseDao.upsert]: route rows through WriteGuard first. */
+    /** Claims only non-default legacy rows; shared defaults keep `ownerId IS NULL`. */
+    @Query("UPDATE categories SET ownerId = :ownerId WHERE ownerId IS NULL AND isDefault = 0")
+    suspend fun claimLegacyRows(ownerId: String): Int
+
+    /** Internal: the store owns the authorise-then-persist transaction. */
     @Upsert
     suspend fun upsert(categories: List<CategoryEntity>)
 
+    /** See [ExpenseDao.markSyncedIfUnchanged]. */
     @Query(
         """
         UPDATE categories
-        SET syncStateRaw = :syncedState, remoteId = CAST(id AS TEXT)
-        WHERE id IN (:ids)
+        SET syncStateRaw = :syncedState,
+            remoteId = CAST(id AS TEXT),
+            revision = revision + 1
+        WHERE id = :id
           AND isDefault = 0
-          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+          AND LOWER(ownerId) = LOWER(:ownerId)
+          AND revision = :expectedRevision
+          AND syncStateRaw = :expectedState
         """
     )
-    suspend fun markSynced(
-        ids: List<UUID>,
+    suspend fun markSyncedIfUnchanged(
+        id: UUID,
         ownerId: String,
+        expectedRevision: Int,
+        expectedState: Int,
         syncedState: Int = SyncState.SYNCED.raw
+    ): Int
+
+    /** See [ExpenseDao.deleteTombstoneIfUnchanged]. */
+    @Query(
+        """
+        DELETE FROM categories
+        WHERE id = :id
+          AND isDefault = 0
+          AND LOWER(ownerId) = LOWER(:ownerId)
+          AND revision = :expectedRevision
+          AND syncStateRaw = :expectedState
+        """
     )
+    suspend fun deleteTombstoneIfUnchanged(
+        id: UUID,
+        ownerId: String,
+        expectedRevision: Int,
+        expectedState: Int = SyncState.DELETED.raw
+    ): Int
 
     /** Owner-scoped, and never deletes a shared default category. */
     @Query(
@@ -175,7 +272,7 @@ interface CategoryDao {
         DELETE FROM categories
         WHERE id IN (:ids)
           AND isDefault = 0
-          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+          AND LOWER(ownerId) = LOWER(:ownerId)
         """
     )
     suspend fun deleteByIds(ids: List<UUID>, ownerId: String)
@@ -188,7 +285,7 @@ interface FriendDao {
         """
         SELECT * FROM friends
         WHERE syncStateRaw != :deletedState
-          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+          AND LOWER(ownerId) = LOWER(:ownerId)
         ORDER BY name ASC
         """
     )
@@ -198,15 +295,18 @@ interface FriendDao {
         """
         SELECT * FROM friends
         WHERE id = :id
-          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+          AND LOWER(ownerId) = LOWER(:ownerId)
         """
     )
     suspend fun byId(id: UUID, ownerId: String): FriendEntity?
 
+    @Query("SELECT * FROM friends WHERE id = :id")
+    suspend fun byIdUnscoped(id: UUID): FriendEntity?
+
     @Query(
         """
         SELECT * FROM friends
-        WHERE ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId)
+        WHERE LOWER(ownerId) = LOWER(:ownerId)
         """
     )
     suspend fun allForOwner(ownerId: String): List<FriendEntity>
@@ -215,34 +315,61 @@ interface FriendDao {
         """
         SELECT * FROM friends
         WHERE syncStateRaw != :syncedState
-          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+          AND LOWER(ownerId) = LOWER(:ownerId)
         """
     )
     suspend fun pendingPush(ownerId: String, syncedState: Int = SyncState.SYNCED.raw): List<FriendEntity>
 
-    /** See [ExpenseDao.upsert]: route rows through WriteGuard first. */
+    @Query("UPDATE friends SET ownerId = :ownerId WHERE ownerId IS NULL")
+    suspend fun claimLegacyRows(ownerId: String): Int
+
+    /** Internal: the store owns the authorise-then-persist transaction. */
     @Upsert
     suspend fun upsert(friends: List<FriendEntity>)
 
+    /** See [ExpenseDao.markSyncedIfUnchanged]. */
     @Query(
         """
         UPDATE friends
-        SET syncStateRaw = :syncedState, remoteId = CAST(id AS TEXT)
-        WHERE id IN (:ids)
-          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+        SET syncStateRaw = :syncedState,
+            remoteId = CAST(id AS TEXT),
+            revision = revision + 1
+        WHERE id = :id
+          AND LOWER(ownerId) = LOWER(:ownerId)
+          AND revision = :expectedRevision
+          AND syncStateRaw = :expectedState
         """
     )
-    suspend fun markSynced(
-        ids: List<UUID>,
+    suspend fun markSyncedIfUnchanged(
+        id: UUID,
         ownerId: String,
+        expectedRevision: Int,
+        expectedState: Int,
         syncedState: Int = SyncState.SYNCED.raw
+    ): Int
+
+    /** See [ExpenseDao.deleteTombstoneIfUnchanged]. */
+    @Query(
+        """
+        DELETE FROM friends
+        WHERE id = :id
+          AND LOWER(ownerId) = LOWER(:ownerId)
+          AND revision = :expectedRevision
+          AND syncStateRaw = :expectedState
+        """
     )
+    suspend fun deleteTombstoneIfUnchanged(
+        id: UUID,
+        ownerId: String,
+        expectedRevision: Int,
+        expectedState: Int = SyncState.DELETED.raw
+    ): Int
 
     @Query(
         """
         DELETE FROM friends
         WHERE id IN (:ids)
-          AND (ownerId IS NULL OR LOWER(ownerId) = LOWER(:ownerId))
+          AND LOWER(ownerId) = LOWER(:ownerId)
         """
     )
     suspend fun deleteByIds(ids: List<UUID>, ownerId: String)

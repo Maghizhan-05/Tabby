@@ -1,6 +1,7 @@
 package com.maghizhan.tabby.sync
 
 import com.maghizhan.tabby.data.remote.model.LocalRecord
+import com.maghizhan.tabby.data.remote.ActiveSession
 import com.maghizhan.tabby.data.remote.CompleteSnapshot
 import com.maghizhan.tabby.data.remote.model.RemoteFriendRow
 import com.maghizhan.tabby.data.sync.FriendReconciliation
@@ -130,7 +131,7 @@ class FriendReconciliationTest {
  * used here and the owner-filtering rules are driven by `activeOwnerId`.
  */
 private fun snapshot(vararg rows: RemoteFriendRow): CompleteSnapshot<RemoteFriendRow> =
-    CompleteSnapshot.forTesting(rows.toList(), ownerId = "snapshot-owner")
+    CompleteSnapshot.forTesting(rows.toList(), ActiveSession("snapshot-owner", 1))
 
 /**
  * A snapshot that could NOT be proven complete. Merges are still allowed from
@@ -139,6 +140,6 @@ private fun snapshot(vararg rows: RemoteFriendRow): CompleteSnapshot<RemoteFrien
 private fun unprovenSnapshot(vararg rows: RemoteFriendRow): CompleteSnapshot<RemoteFriendRow> =
     CompleteSnapshot.forTesting(
         rows.toList(),
-        ownerId = "snapshot-owner",
+        ActiveSession("snapshot-owner", 1),
         authorizesAbsenceDeletion = false
     )

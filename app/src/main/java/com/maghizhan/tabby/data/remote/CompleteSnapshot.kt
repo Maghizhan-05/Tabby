@@ -3,108 +3,172 @@ package com.maghizhan.tabby.data.remote
 import androidx.annotation.VisibleForTesting
 
 /**
- * A set of remote rows, carrying **who it belongs to** and **whether it is
- * provably complete**.
+ * Remote rows plus two facts about them: **which account** they belong to, and
+ * **whether their completeness was proven**.
  *
- * Absence-based deletion in the reconciliation rules is only sound against a
- * complete snapshot: a truncated or shifted result reads as "everything else was
- * deleted elsewhere" and destroys real records. Supabase also caps an unpaged
- * `select` (1000 rows by default), so "I asked for everything" is not proof.
+ * Absence-based deletion is only sound against a result set that is provably
+ * complete and provably the right account's. Get either wrong and reconciliation
+ * deletes live records.
  *
- * Two properties are therefore baked into the type rather than left to callers:
+ * There is no public factory. The only way to obtain a snapshot is [fetch],
+ * which applies the completeness rule itself — so a caller cannot wrap an
+ * arbitrary list and declare it proven. That matters because "is this complete?"
+ * is a property of *how the rows were obtained*, which a value object can never
+ * verify after the fact.
  *
- * 1. **Completeness is proven by an exact server-side count**, not inferred from
- *    a short page. Offset paging across several requests cannot prove it: if a
- *    row earlier in the ordering is deleted between requests, every later row
- *    shifts down one offset and one is skipped entirely — and a skipped row
- *    looks exactly like a remotely deleted row to reconciliation.
+ * ## Why an exact count alone does not prove completeness across requests
  *
- *    When the count cannot be matched the snapshot is still usable, but
- *    [authorizesAbsenceDeletion] is false and reconciliation performs
- *    non-destructive merges only. A concurrent delete therefore degrades to
- *    "merge now, delete next cycle" instead of destroying data.
+ * Offset ranges are evaluated against a different server statement per request.
+ * Delete one early row and insert one later row between two pages and the total
+ * is unchanged while one row is never returned — the count "proves" a snapshot
+ * that is missing a record, and reconciliation reads that record as deleted
+ * remotely. Duplicate ids across overlapping pages forge the same false proof by
+ * padding the count back up.
  *
- * 2. **The snapshot carries the owner it was fetched for.** Without it, a fetch
- *    started as account A and resolving after a switch to account B would be
- *    reconciled against B's local rows: A's rows filter out, B's synced rows
- *    look absent, and they get absence-deleted. [requireOwner] makes the caller
- *    re-assert the active owner before the snapshot can be applied.
- *
- * The constructor is private, and the only production factories are
- * [proved] and [partial] — both of which demand an owner, and only one of which
- * authorises deletion. There is no production path that wraps a bare list.
+ * So the rule is deliberately strict: completeness is proven only by a **single
+ * request** whose exact server-side count matches the rows received, with no
+ * duplicate ids. Anything spanning more than one request is unproven: usable for
+ * merging, never for deletion. A very large account therefore syncs additively
+ * and simply never absence-deletes, which is the correct direction to fail in.
  */
 class CompleteSnapshot<T> private constructor(
     val rows: List<T>,
-    /** The authenticated user id this snapshot was fetched for. */
-    val ownerId: String,
-    /**
-     * True only when an exact server-side count matched the rows received.
-     * Reconciliation consults this before emitting any deletion.
-     */
+    /** The session these rows were fetched under. */
+    val session: ActiveSession,
+    /** True only when completeness was proven; consulted before any deletion. */
     val authorizesAbsenceDeletion: Boolean,
-    /** Requests used, for diagnostics and for the page-ceiling check. */
-    val pagesFetched: Int
+    val requestsMade: Int,
+    /** Why deletion is not authorised, for diagnostics. Null when it is. */
+    val unprovenReason: String?
 ) {
 
-    /** Raised when the active owner changed while the snapshot was in flight. */
-    class OwnerMismatchException(expected: String, actual: String) :
-        Exception("Snapshot belongs to $expected but the active owner is now $actual.")
+    val ownerId: String get() = session.ownerId
+
+    /** Raised when the active session is not the one the snapshot was fetched under. */
+    class SessionMismatchException(expected: ActiveSession, actual: ActiveSession) : Exception(
+        "Snapshot belongs to generation ${expected.generation} but the active session " +
+            "is generation ${actual.generation}."
+    )
 
     /**
-     * Returns [rows] only if this snapshot belongs to [activeOwnerId].
+     * Returns [rows] only if [binding] is still the session this snapshot was
+     * fetched under.
      *
-     * Call this immediately before applying the snapshot, with the owner read
-     * fresh from the live session — that is what closes the account-switch
-     * window described above.
+     * This closes the account-switch window: a fetch started as A and resolving
+     * after a switch to B would otherwise be reconciled against B's local rows,
+     * where A's rows filter out, B's synced rows look absent, and every one of
+     * them is absence-deleted.
      */
-    fun requireOwner(activeOwnerId: String): List<T> {
-        val active = normalize(activeOwnerId)
-        if (active != normalize(ownerId)) throw OwnerMismatchException(ownerId, activeOwnerId)
+    fun requireSession(binding: SessionBinding): List<T> {
+        if (binding.session != session) {
+            throw SessionMismatchException(session, binding.session)
+        }
         return rows
     }
 
+    /** One page of rows plus the exact total the same statement reported. */
+    data class Page<T>(val rows: List<T>, val exactTotal: Long?)
+
     companion object {
-        /** Supabase's own per-request row ceiling. */
-        const val MAXIMUM_ROWS = 1000
+        /**
+         * Rows per request. Supabase's own default ceiling is 1000, so asking for
+         * more in one statement is silently truncated — and a truncated page that
+         * looked complete would authorise deleting everything beyond it.
+         */
+        const val PAGE_SIZE = 1000L
+
+        /** Hard stop so a backend reporting endless full pages cannot spin. */
+        const val MAXIMUM_REQUESTS = 200
 
         /**
-         * Hard stop on requests per fetch, so a backend that keeps reporting
-         * full pages cannot spin forever.
+         * Fetches rows under [binding] and decides for itself whether the result
+         * is provably complete.
+         *
+         * @param idOf extracts a row's identity, used to detect duplicates.
+         * @param fetchPage requests rows `[from, to]` inclusive and returns them
+         *   with the exact total the SAME statement reported (`Count.EXACT`).
+         *
+         * The session is revalidated before the first request, so a cycle cannot
+         * even begin against a session that has already changed.
          */
-        const val MAXIMUM_PAGES = 200
+        suspend fun <T> fetch(
+            binding: SessionBinding,
+            idOf: (T) -> Any,
+            pageSize: Long = PAGE_SIZE,
+            fetchPage: suspend (from: Long, to: Long) -> Page<T>
+        ): CompleteSnapshot<T> {
+            binding.revalidate()
 
-        private fun normalize(value: String): String = value.trim().lowercase()
+            val rows = mutableListOf<T>()
+            val seen = mutableSetOf<Any>()
+            var duplicateSeen = false
+            var firstTotal: Long? = null
+            var totalMoved = false
+            var requests = 0
 
-        /**
-         * A snapshot whose completeness was PROVEN: the exact count reported by
-         * the server matched the rows received. Absence deletion is authorised.
-         */
-        fun <T> proved(rows: List<T>, ownerId: String, pagesFetched: Int): CompleteSnapshot<T> =
-            CompleteSnapshot(rows.toList(), ownerId, true, pagesFetched)
+            while (requests < MAXIMUM_REQUESTS) {
+                val from = requests * pageSize
+                val page = fetchPage(from, from + pageSize - 1)
+                requests++
 
-        /**
-         * A snapshot that could NOT be proven complete — a missing count, a
-         * count that moved mid-fetch, or the page ceiling. Safe to merge from,
-         * never safe to delete from.
-         */
-        fun <T> partial(rows: List<T>, ownerId: String, pagesFetched: Int): CompleteSnapshot<T> =
-            CompleteSnapshot(rows.toList(), ownerId, false, pagesFetched)
+                if (firstTotal == null) {
+                    firstTotal = page.exactTotal
+                } else if (page.exactTotal != null && page.exactTotal != firstTotal) {
+                    totalMoved = true
+                }
+
+                for (row in page.rows) {
+                    if (!seen.add(idOf(row))) duplicateSeen = true
+                }
+                rows += page.rows
+
+                if (page.rows.size < pageSize) break
+                if (firstTotal != null && rows.size >= firstTotal) break
+            }
+
+            // The session is revalidated AFTER assembling too, not only before
+            // the first request. A fetch can span an account switch, and rows
+            // belonging to the previous account must never be handed back as a
+            // snapshot the caller may act on.
+            binding.revalidate()
+
+            val reason = when {
+                firstTotal == null -> "the backend reported no exact row count"
+                duplicateSeen -> "the result contained duplicate ids"
+                totalMoved -> "the row count changed between requests"
+                requests > 1 ->
+                    "the result spanned $requests requests, and offset ranges across " +
+                        "separate statements cannot prove completeness"
+                rows.size.toLong() != firstTotal ->
+                    "received ${rows.size} rows but the backend counted $firstTotal"
+                else -> null
+            }
+
+            return CompleteSnapshot(
+                rows = rows.toList(),
+                session = binding.session,
+                authorizesAbsenceDeletion = reason == null,
+                requestsMade = requests,
+                unprovenReason = reason
+            )
+        }
 
         /**
          * Test-only constructor, [VisibleForTesting] with `NONE` so any
-         * production use is a lint error. Tests need to build a known-complete
-         * snapshot without a server.
+         * production use is a lint error. Tests need to assert reconciliation
+         * behaviour for proven and unproven snapshots without a server.
          */
         @VisibleForTesting(otherwise = VisibleForTesting.NONE)
         fun <T> forTesting(
             rows: List<T>,
-            ownerId: String,
+            session: ActiveSession,
             authorizesAbsenceDeletion: Boolean = true
-        ): CompleteSnapshot<T> =
-            CompleteSnapshot(rows.toList(), ownerId, authorizesAbsenceDeletion, 1)
+        ): CompleteSnapshot<T> = CompleteSnapshot(
+            rows = rows.toList(),
+            session = session,
+            authorizesAbsenceDeletion = authorizesAbsenceDeletion,
+            requestsMade = 1,
+            unprovenReason = if (authorizesAbsenceDeletion) null else "test-constructed as unproven"
+        )
     }
 }
-
-/** Rows plus the exact total the same server statement reported. */
-data class CountedRows<T>(val rows: List<T>, val exactTotal: Long?)
