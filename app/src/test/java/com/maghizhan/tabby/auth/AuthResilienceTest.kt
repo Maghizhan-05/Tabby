@@ -2,6 +2,7 @@ package com.maghizhan.tabby.auth
 
 import com.maghizhan.tabby.data.remote.AuthServicing
 import com.maghizhan.tabby.data.remote.AuthSession
+import com.maghizhan.tabby.data.remote.InMemoryOAuthTransactionStore
 import com.maghizhan.tabby.ui.auth.AuthUiState
 import com.maghizhan.tabby.ui.auth.AuthViewModel
 import kotlinx.coroutines.CompletableDeferred
@@ -398,7 +399,8 @@ class AuthResilienceTest {
                 override suspend fun signOut() = Unit
             }
 
-            val viewModel = AuthViewModel(service)
+            // Armed: callbacks are only honoured for a sign-in this app began.
+            val viewModel = AuthViewModel(service, InMemoryOAuthTransactionStore(pending = true))
             advanceUntilIdle()
             assertTrue(viewModel.uiState.value is AuthUiState.Restoring)
 
@@ -433,7 +435,7 @@ class AuthResilienceTest {
             override suspend fun signOut() = Unit
         }
 
-        val viewModel = AuthViewModel(service)
+        val viewModel = AuthViewModel(service, InMemoryOAuthTransactionStore(pending = true))
         viewModel.restoreJob.join()
 
         val callback = launch {

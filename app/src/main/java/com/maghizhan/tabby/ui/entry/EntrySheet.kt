@@ -263,22 +263,20 @@ fun EntrySheet(
     if (showDatePicker) {
         val zone = ZoneId.systemDefault()
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = state.date.toEpochMilli()
+            // The expense's LOCAL calendar date, re-expressed as UTC midnight.
+            // Material interprets `initialSelectedDateMillis` as a UTC calendar
+            // date, so passing the raw instant selected the wrong day whenever
+            // the local offset pushed it across a UTC boundary — yesterday east
+            // of UTC in the morning, tomorrow west of it in the evening.
+            initialSelectedDateMillis = EntryForm.datePickerInitialMillis(state.date, zone)
         )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
-                        // The picker reports a UTC midnight; the time-of-day is
-                        // preserved from the current value so choosing a date
-                        // does not silently reset the clock to 00:00.
-                        val pickedDate = Instant.ofEpochMilli(millis)
-                            .atZone(ZoneOffset.UTC)
-                            .toLocalDate()
-                        val existingTime = state.date.atZone(zone).toLocalTime()
                         viewModel.onDateChanged(
-                            pickedDate.atTime(existingTime).atZone(zone).toInstant()
+                            EntryForm.instantFromPickedDate(millis, state.date, zone)
                         )
                     }
                     showDatePicker = false

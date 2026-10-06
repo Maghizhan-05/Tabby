@@ -33,6 +33,12 @@ data class SyncOutcome(
     val deletedRemotely: Int = 0,
     /** Rows whose acknowledgement was refused because they changed mid-upload. */
     val acknowledgementsSkipped: Int = 0,
+    /**
+     * Rows dropped because their UUID already belongs to a different account
+     * locally. Non-zero means a collision was refused rather than overwriting
+     * another account's record.
+     */
+    val collisionsRefused: Int = 0,
     /** Null when the snapshot authorised absence deletion. */
     val deletionWithheldReason: String? = null
 )
@@ -99,6 +105,21 @@ abstract class SyncCoordinator<Entity : Any, Row : Any>(
     protected abstract suspend fun applyUpdates(rows: List<Row>, ownerId: String)
     protected abstract suspend fun applyDeletions(ids: List<UUID>, ownerId: String)
 
+    /**
+     * Ids among [ids] that already belong to a DIFFERENT account locally.
+     *
+     * Reconciliation plans owner-filtered, but the applies land through an
+     * id-only `@Upsert`, and an INSERT has no WHERE clause: a remote row whose
+     * UUID collides with another account's cached row replaced it outright,
+     * silently destroying that account's expense/category/friend. Collisions are
+     * refused rather than merged — the colliding row is not ours to overwrite,
+     * and dropping it loses nothing the backend will not re-send.
+     */
+    protected abstract suspend fun foreignOwnedIds(ids: List<UUID>, ownerId: String): List<UUID>
+
+    /** The local id of a remote row, for collision checking. */
+    protected abstract fun idOfRow(row: Row): UUID
+
     protected abstract suspend fun upsertRemote(rows: List<Row>)
     protected abstract suspend fun deleteRemote(ids: List<UUID>)
 
@@ -137,6 +158,7 @@ abstract class SyncCoordinator<Entity : Any, Row : Any>(
         var inserted = 0
         var updated = 0
         var deletedLocally = 0
+        var collisionsRefused = 0
 
         transactions.inTransaction {
             val plan = plan(
@@ -144,13 +166,30 @@ abstract class SyncCoordinator<Entity : Any, Row : Any>(
                 snapshot = snapshot,
                 ownerId = owner
             )
-            if (plan.inserts.isNotEmpty()) {
-                applyInserts(plan.inserts, owner)
-                inserted = plan.inserts.size
+
+            // Collision screen, inside the same transaction as the applies: a
+            // check performed outside it could be invalidated before the upsert
+            // runs. Reconciliation plans owner-filtered, but the applies go
+            // through an id-only @Upsert, so without this a remote UUID that
+            // collides with another account's cached row replaces it.
+            val candidateIds = (plan.inserts + plan.updates).map(::idOfRow).distinct()
+            val foreign = if (candidateIds.isEmpty()) {
+                emptySet()
+            } else {
+                foreignOwnedIds(candidateIds, owner).toSet()
             }
-            if (plan.updates.isNotEmpty()) {
-                applyUpdates(plan.updates, owner)
-                updated = plan.updates.size
+            val inserts = plan.inserts.filterNot { idOfRow(it) in foreign }
+            val updates = plan.updates.filterNot { idOfRow(it) in foreign }
+            collisionsRefused =
+                (plan.inserts.size - inserts.size) + (plan.updates.size - updates.size)
+
+            if (inserts.isNotEmpty()) {
+                applyInserts(inserts, owner)
+                inserted = inserts.size
+            }
+            if (updates.isNotEmpty()) {
+                applyUpdates(updates, owner)
+                updated = updates.size
             }
             if (plan.deletions.isNotEmpty()) {
                 applyDeletions(plan.deletions, owner)
@@ -216,6 +255,7 @@ abstract class SyncCoordinator<Entity : Any, Row : Any>(
             pushed = pushed,
             deletedRemotely = deletedRemotely,
             acknowledgementsSkipped = skipped,
+            collisionsRefused = collisionsRefused,
             deletionWithheldReason = snapshot.unprovenReason
         )
     }
@@ -301,6 +341,11 @@ class ExpenseSyncCoordinator(
     override suspend fun applyDeletions(ids: List<UUID>, ownerId: String) =
         dao.deleteByIds(ids, ownerId)
 
+    override suspend fun foreignOwnedIds(ids: List<UUID>, ownerId: String) =
+        dao.foreignOwnedIds(ids, ownerId)
+
+    override fun idOfRow(row: RemoteExpenseRow): UUID = row.id
+
     override suspend fun upsertRemote(rows: List<RemoteExpenseRow>) = repository.upsert(rows)
     override suspend fun deleteRemote(ids: List<UUID>) = repository.delete(ids)
 
@@ -370,6 +415,11 @@ class CategorySyncCoordinator(
 
     override suspend fun applyDeletions(ids: List<UUID>, ownerId: String) =
         dao.deleteByIds(ids, ownerId)
+
+    override suspend fun foreignOwnedIds(ids: List<UUID>, ownerId: String) =
+        dao.foreignOwnedIds(ids, ownerId)
+
+    override fun idOfRow(row: RemoteCategoryRow): UUID = row.id
 
     override suspend fun upsertRemote(rows: List<RemoteCategoryRow>) = repository.upsert(rows)
     override suspend fun deleteRemote(ids: List<UUID>) = repository.delete(ids)
@@ -442,6 +492,11 @@ class FriendSyncCoordinator(
 
     override suspend fun applyDeletions(ids: List<UUID>, ownerId: String) =
         dao.deleteByIds(ids, ownerId)
+
+    override suspend fun foreignOwnedIds(ids: List<UUID>, ownerId: String) =
+        dao.foreignOwnedIds(ids, ownerId)
+
+    override fun idOfRow(row: RemoteFriendRow): UUID = row.id
 
     override suspend fun upsertRemote(rows: List<RemoteFriendRow>) = repository.upsert(rows)
     override suspend fun deleteRemote(ids: List<UUID>) = repository.delete(ids)

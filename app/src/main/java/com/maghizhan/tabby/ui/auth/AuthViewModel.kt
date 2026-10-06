@@ -1,9 +1,14 @@
 package com.maghizhan.tabby.ui.auth
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.maghizhan.tabby.data.remote.AuthServicing
 import com.maghizhan.tabby.data.remote.AuthSession
+import com.maghizhan.tabby.data.remote.InMemoryOAuthTransactionStore
+import com.maghizhan.tabby.data.remote.OAuthTransactionStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -153,7 +158,13 @@ data class LoginFormState(
  * concurrency instead of merely being untidy.
  */
 class AuthViewModel(
-    private val authService: AuthServicing
+    private val authService: AuthServicing,
+    /**
+     * Records whether an OAuth sign-in this app started is awaiting its
+     * callback. See [handleOAuthCallback]: without it, any app on the device can
+     * force the router to Signed Out through the exported callback filter.
+     */
+    private val oauthTransactions: OAuthTransactionStore = InMemoryOAuthTransactionStore()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Restoring)
@@ -296,32 +307,61 @@ class AuthViewModel(
      * at [handleOAuthCallback]. Claiming a session here reported "no session" on
      * a first-ever login, because the library call returns as soon as the
      * browser opens.
+     *
+     * The pending transaction is recorded BEFORE the browser opens, and only on
+     * success would be too late: the callback can reach a freshly started
+     * process, so the record must already be durable when the user consents.
      */
     suspend fun beginGoogleSignIn() {
-        authService.beginGoogleSignIn()
+        oauthTransactions.begin()
+        try {
+            authService.beginGoogleSignIn()
+        } catch (error: Throwable) {
+            // The consent page never opened, so no callback can be expected;
+            // leaving the transaction pending would re-arm the exported filter.
+            oauthTransactions.clear()
+            throw error
+        }
     }
 
     /**
      * Completes the OAuth round-trip from the callback URL. This is the call
      * that actually authenticates, by exchanging the PKCE code for a session.
      *
-     * A FAILED exchange must commit `SignedOut(error)` rather than leaving the
-     * router untouched. The callback claims the newest intent, which rejects the
-     * older restore when it lands — so committing nothing on failure strands the
-     * user on the splash screen permanently, with no path forward. That is worse
-     * than the original login flash, and it is specific to the callback path:
-     * for an in-app sign-in the previous state is still meaningful, but here the
-     * restore that would have produced one has already been superseded.
+     * Two rules, both of which exist because the callback intent filter is
+     * EXPORTED — any app on the device can deliver a structurally valid callback:
+     *
+     * 1. A callback is ignored unless it corresponds to a sign-in this app
+     *    actually started. Without that binding, another app could disrupt the
+     *    router at will by sending a callback with a bad code.
+     *
+     * 2. A FAILED exchange must not evict an already authenticated user. It
+     *    commits `SignedOut(error)` only when the router is not authenticated —
+     *    which is the cold-start case this behaviour was written for: there the
+     *    callback claims the newest intent, so the restore that would have
+     *    produced a state has already been superseded, and committing nothing
+     *    would strand the user on the splash screen permanently. When a session
+     *    is live there is a meaningful state to keep, so the failure is reported
+     *    on the form instead.
      */
     suspend fun handleOAuthCallback(callbackUrl: String) {
+        if (!oauthTransactions.isPending()) return
+
         val intent = beginIntent()
         val next = try {
             AuthUiState.Authenticated(authService.completeOAuth(callbackUrl))
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Throwable) {
-            AuthUiState.SignedOut(error = authNoticeFor(error, AuthMode.SIGN_IN))
+            val notice = authNoticeFor(error, AuthMode.SIGN_IN)
+            oauthTransactions.clear()
+            if (_uiState.value is AuthUiState.Authenticated) {
+                _formState.update { it.copy(isBusy = false, notice = notice) }
+                return
+            }
+            AuthUiState.SignedOut(error = notice)
         }
+        oauthTransactions.clear()
         commit(intent, next)
     }
 
@@ -351,6 +391,26 @@ class AuthViewModel(
     }
 
     private suspend fun beginIntent(): Long = authMutex.withLock { ++intentCounter }
+
+    companion object {
+        /**
+         * Builds instances for an activity's [androidx.lifecycle.ViewModelStore].
+         *
+         * A factory, not a `by lazy` field on the activity: auth work runs in
+         * `viewModelScope`, and an instance owned by the activity instance is
+         * neither retained across a configuration change nor ever cleared. On
+         * rotation that produced a SECOND router doing a second restore while the
+         * first kept running against a state nobody observed — stale auth work
+         * and lost UI results. Obtained from the store, one instance spans the
+         * activity's whole lifetime and is cleared exactly once.
+         */
+        fun factory(
+            authService: AuthServicing,
+            oauthTransactions: OAuthTransactionStore
+        ): ViewModelProvider.Factory = viewModelFactory {
+            initializer { AuthViewModel(authService, oauthTransactions) }
+        }
+    }
 
     /**
      * Atomic compare-and-set against the newest *started* intent. Read and write

@@ -91,7 +91,8 @@ class SyncSchedulerTest {
 
     private fun scheduler(
         sessions: SessionProvider,
-        expenses: ExpenseRepositoring = Expenses()
+        expenses: ExpenseRepositoring = Expenses(),
+        onRunCompleted: suspend (String) -> Unit = {}
     ): SyncScheduler {
         val runner = RoomTransactionRunner(database)
         return SyncScheduler(
@@ -100,7 +101,8 @@ class SyncSchedulerTest {
                 database.categoryDao(), Categories(), runner, sessions
             ),
             friends = FriendSyncCoordinator(database.friendDao(), Friends(), runner, sessions),
-            sessions = sessions
+            sessions = sessions,
+            onRunCompleted = onRunCompleted
         )
     }
 
@@ -142,5 +144,68 @@ class SyncSchedulerTest {
         val run = scheduler(FixedSessions(ActiveSession(owner, 1))).onAuthenticated()
         assertEquals(listOf("categories", "friends", "expenses"), order)
         assertNull(run.skippedReason)
+    }
+
+    /**
+     * Returning to the foreground must PULL.
+     *
+     * `onForegrounded` existed but had no production caller, so another device's
+     * edits and deletes stayed invisible until the next authentication or
+     * relaunch. The activity now drives it from a lifecycle observer; this pins
+     * that the trigger itself runs a full cycle and still honours the
+     * signed-out skip.
+     */
+    @Test
+    fun `the foreground trigger runs a full cycle`() = runTest {
+        val run = scheduler(FixedSessions(ActiveSession(owner, 1))).onForegrounded()
+
+        assertEquals(listOf("categories", "friends", "expenses"), order)
+        assertNull(run.skippedReason)
+    }
+
+    @Test
+    fun `a foreground trigger while signed out is skipped rather than failing`() = runTest {
+        val run = scheduler(FixedSessions(null)).onForegrounded()
+
+        assertEquals("signed out", run.skippedReason)
+        assertEquals(emptyList<String>(), order)
+    }
+
+    /**
+     * A completed run is a moment the widget's numbers can have changed, because
+     * reconciliation is where other devices' edits land. Nothing refreshed it
+     * before, so the home screen kept whatever it first rendered.
+     */
+    @Test
+    fun `a completed run reports the account so the widget can be refreshed`() = runTest {
+        val refreshed = mutableListOf<String>()
+        scheduler(
+            FixedSessions(ActiveSession(owner, 1)),
+            onRunCompleted = { refreshed += it }
+        ).runNow()
+
+        assertEquals(listOf(owner), refreshed)
+    }
+
+    @Test
+    fun `a skipped run does not refresh the widget`() = runTest {
+        val refreshed = mutableListOf<String>()
+        scheduler(FixedSessions(null), onRunCompleted = { refreshed += it }).runNow()
+
+        assertEquals(emptyList<String>(), refreshed)
+    }
+
+    @Test
+    fun `the widget is refreshed after the local store reflects the run`() = runTest {
+        // Ordering matters: refreshing before the applies would snapshot stale
+        // numbers.
+        val events = mutableListOf<String>()
+        scheduler(
+            FixedSessions(ActiveSession(owner, 1)),
+            onRunCompleted = { events += "refresh" }
+        ).runNow()
+
+        assertEquals(listOf("categories", "friends", "expenses"), order)
+        assertEquals(listOf("refresh"), events)
     }
 }

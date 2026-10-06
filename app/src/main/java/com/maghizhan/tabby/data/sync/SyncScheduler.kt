@@ -45,7 +45,16 @@ class SyncScheduler(
     private val expenses: ExpenseSyncCoordinator,
     private val categories: CategorySyncCoordinator,
     private val friends: FriendSyncCoordinator,
-    private val sessions: SessionProvider
+    private val sessions: SessionProvider,
+    /**
+     * Called after a completed run with the account that ran.
+     *
+     * The widget renders a snapshot the app writes, and reconciliation is where
+     * another device's edits and deletes land — so a run that changed the local
+     * store without refreshing the widget leaves stale totals on the home screen
+     * until something else happens to refresh it.
+     */
+    private val onRunCompleted: suspend (ownerId: String) -> Unit = {}
 ) {
     private val runMutex = Mutex()
 
@@ -69,6 +78,12 @@ class SyncScheduler(
         val categoryOutcome = categories.synchronizeQuietly()
         val friendOutcome = friends.synchronizeQuietly()
         val expenseOutcome = expenses.synchronizeQuietly()
+
+        // After the local store reflects the run, and inside the lock so two
+        // runs cannot interleave a refresh with each other's applies. Failures
+        // are swallowed by the callback itself: a widget redraw must not fail a
+        // sync run.
+        onRunCompleted(session.ownerId)
 
         SyncRun(
             categories = categoryOutcome,

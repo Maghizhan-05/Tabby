@@ -3,10 +3,15 @@ package com.maghizhan.tabby
 import android.content.Context
 import com.maghizhan.tabby.data.local.CategoryStore
 import com.maghizhan.tabby.data.local.DefaultCategories
+import com.maghizhan.tabby.data.local.EntryWriter
 import com.maghizhan.tabby.data.local.ExpenseStore
 import com.maghizhan.tabby.data.local.FriendStore
+import com.maghizhan.tabby.data.local.PreferencesSeedMarker
 import com.maghizhan.tabby.data.local.RoomTransactionRunner
+import com.maghizhan.tabby.data.local.SeedMarker
 import com.maghizhan.tabby.data.local.TabbyDatabase
+import com.maghizhan.tabby.data.remote.OAuthTransactionStore
+import com.maghizhan.tabby.data.remote.PreferencesOAuthTransactionStore
 import com.maghizhan.tabby.data.remote.SessionProvider
 import com.maghizhan.tabby.data.remote.SupabaseAuthService
 import com.maghizhan.tabby.data.remote.SupabaseCategoryRepository
@@ -17,6 +22,8 @@ import com.maghizhan.tabby.data.sync.CategorySyncCoordinator
 import com.maghizhan.tabby.data.sync.ExpenseSyncCoordinator
 import com.maghizhan.tabby.data.sync.FriendSyncCoordinator
 import com.maghizhan.tabby.data.sync.SyncScheduler
+import com.maghizhan.tabby.widget.PreferencesWidgetSnapshotStore
+import com.maghizhan.tabby.widget.WidgetUpdater
 
 /**
  * The application dependency graph.
@@ -34,6 +41,9 @@ class AppGraph(context: Context) {
     val sessions: SessionProvider = SupabaseSessionProvider()
     val authService = SupabaseAuthService()
 
+    /** Durable record of a pending OAuth transaction; see [OAuthTransactionStore]. */
+    val oauthTransactions: OAuthTransactionStore = PreferencesOAuthTransactionStore(context)
+
     /** Read APIs for the UI. Writes always go through the stores below. */
     val expenseDao = database.expenseDao()
     val categoryDao = database.categoryDao()
@@ -44,6 +54,24 @@ class AppGraph(context: Context) {
     val categoryStore = CategoryStore(database.categoryDao(), transactions)
     val friendStore = FriendStore(database.friendDao(), transactions)
 
+    /** One transaction for "create this category AND save this expense". */
+    val entryWriter = EntryWriter(expenseStore, categoryStore, transactions)
+
+    /**
+     * Keeps the home-screen widget's owner-scoped snapshot current.
+     *
+     * Wired here and triggered from the scheduler and the activity, because a
+     * widget the app never refreshes shows whatever it rendered first — which
+     * is what `updatePeriodMillis="0"` quietly depended on and nothing provided.
+     */
+    val widgetUpdater = WidgetUpdater(
+        context = context.applicationContext,
+        expenseDao = database.expenseDao(),
+        store = PreferencesWidgetSnapshotStore(context)
+    )
+
+    private val seedMarker: SeedMarker = PreferencesSeedMarker(context)
+
     /**
      * Seeds the eight default categories on first run.
      *
@@ -52,7 +80,7 @@ class AppGraph(context: Context) {
      * database write there would be an ANR waiting to happen on a slow device.
      */
     suspend fun seedDefaultCategories() =
-        DefaultCategories.seedIfNeeded(database.categoryDao(), transactions)
+        DefaultCategories.seedIfNeeded(database.categoryDao(), transactions, seedMarker)
 
     private val expenseCoordinator = ExpenseSyncCoordinator(
         dao = database.expenseDao(),
@@ -80,6 +108,9 @@ class AppGraph(context: Context) {
         expenses = expenseCoordinator,
         categories = categoryCoordinator,
         friends = friendCoordinator,
-        sessions = sessions
+        sessions = sessions,
+        // Reconciliation is where another device's edits and deletes land, so a
+        // completed run is a moment the widget's numbers can have changed.
+        onRunCompleted = { owner -> widgetUpdater.setActiveOwner(owner) }
     )
 }

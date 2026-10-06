@@ -376,13 +376,14 @@ class ExpenseSyncCoordinatorTest {
             private val real = database.expenseDao()
             override fun observeVisible(ownerId: String, deletedState: Int) =
                 real.observeVisible(ownerId, deletedState)
-            override suspend fun allVisible(deletedState: Int) = real.allVisible(deletedState)
             override suspend fun byId(id: UUID, ownerId: String) = real.byId(id, ownerId)
             override suspend fun byIdUnscoped(id: UUID) = real.byIdUnscoped(id)
             override suspend fun allForOwner(ownerId: String) = real.allForOwner(ownerId)
             override suspend fun pendingPush(ownerId: String, syncedState: Int) =
                 real.pendingPush(ownerId, syncedState)
             override suspend fun claimLegacyRows(ownerId: String) = real.claimLegacyRows(ownerId)
+            override suspend fun foreignOwnedIds(ids: List<UUID>, ownerId: String) =
+                real.foreignOwnedIds(ids, ownerId)
             override suspend fun upsert(expenses: List<ExpenseEntity>) = real.upsert(expenses)
             override suspend fun markSyncedIfUnchanged(
                 id: UUID,

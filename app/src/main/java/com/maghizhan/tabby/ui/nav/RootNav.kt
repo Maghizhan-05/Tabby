@@ -130,12 +130,19 @@ private fun AuthenticatedHost(
     // Wrapped in a lambda that discards the SyncRun result: a view model only
     // needs "a sync was requested", and returning the run would tempt a screen
     // into waiting on the network before dismissing a sheet.
-    val onLocalWrite: suspend () -> Unit = { syncScheduler.onLocalWrite() }
+    //
+    // The widget is refreshed FIRST, because it must reflect the committed local
+    // write whether or not the push succeeds; the sync run refreshes it again
+    // afterwards if reconciliation changed anything.
+    val onLocalWrite: suspend () -> Unit = {
+        graph.widgetUpdater.setActiveOwner(ownerId)
+        syncScheduler.onLocalWrite()
+    }
 
     val homeViewModel: HomeViewModel = viewModel(key = "home-$ownerId")
     val entryViewModel: EntryViewModel = viewModel(
         key = "entry-$ownerId",
-        factory = EntryViewModel.factory(graph.expenseStore, graph.categoryStore, onLocalWrite)
+        factory = EntryViewModel.factory(graph.entryWriter, graph.expenseStore, onLocalWrite)
     )
     val friendsViewModel: FriendsViewModel = viewModel(
         key = "friends-$ownerId",
@@ -170,13 +177,18 @@ private fun AuthenticatedHost(
     // Shortcut and widget taps. Collected here rather than in the activity so a
     // request can only open the sheet once the user is actually signed in —
     // opening quick entry on the login screen would have nowhere to save to.
-    val quickEntryRequests by QuickEntryLauncher.requests.collectAsStateWithLifecycle()
-    LaunchedEffect(quickEntryRequests) {
-        if (quickEntryRequests > 0) {
-            editingExpense = null
-            entryViewModel.startNew()
-            showEntrySheet = true
-        }
+    //
+    // Requests are consumable ids, not a counter: a counter stayed non-zero
+    // forever, so every rotation and every account-keyed recreation observed the
+    // same non-zero value and reopened a sheet the user had already used. The id
+    // is consumed as soon as it is acted on, and null means nothing outstanding.
+    val quickEntryRequest by QuickEntryLauncher.requests.collectAsStateWithLifecycle()
+    LaunchedEffect(quickEntryRequest) {
+        val requestId = quickEntryRequest ?: return@LaunchedEffect
+        editingExpense = null
+        entryViewModel.startNew()
+        showEntrySheet = true
+        QuickEntryLauncher.consume(requestId)
     }
 
     Scaffold(

@@ -52,17 +52,6 @@ interface ExpenseDao {
     )
     fun observeVisible(ownerId: String, deletedState: Int = SyncState.DELETED.raw): Flow<List<ExpenseEntity>>
 
-    /**
-     * Every non-deleted expense, for the widget only.
-     *
-     * Unscoped by owner because the widget process has no session to scope it
-     * with. Safe on a single-account device, which is the only case the widget
-     * claims to serve; it is NOT a general-purpose read and the in-app screens
-     * must keep using [observeVisible].
-     */
-    @Query("SELECT * FROM expenses WHERE syncStateRaw != :deletedState ORDER BY date DESC")
-    suspend fun allVisible(deletedState: Int = SyncState.DELETED.raw): List<ExpenseEntity>
-
     /** Owner-scoped: a bare id lookup could surface another account's expense. */
     @Query(
         """
@@ -117,6 +106,16 @@ interface ExpenseDao {
      */
     @Query("UPDATE expenses SET ownerId = :ownerId WHERE ownerId IS NULL")
     suspend fun claimLegacyRows(ownerId: String): Int
+
+    @Query(
+        """
+        SELECT id FROM expenses
+        WHERE id IN (:ids)
+          AND ownerId IS NOT NULL
+          AND LOWER(ownerId) != LOWER(:ownerId)
+        """
+    )
+    suspend fun foreignOwnedIds(ids: List<UUID>, ownerId: String): List<UUID>
 
     /** Internal: the store owns the authorise-then-persist transaction. */
     @Upsert
@@ -265,6 +264,22 @@ interface CategoryDao {
     @Query("UPDATE categories SET ownerId = :ownerId WHERE ownerId IS NULL AND isDefault = 0")
     suspend fun claimLegacyRows(ownerId: String): Int
 
+    /**
+     * Ids in [ids] that this account may NOT write.
+     *
+     * A shared default counts as foreign too: it belongs to no account and the
+     * store already refuses to let a signed-in user claim one, so a pulled row
+     * that happens to carry a default's UUID must not replace it either.
+     */
+    @Query(
+        """
+        SELECT id FROM categories
+        WHERE id IN (:ids)
+          AND (isDefault = 1 OR (ownerId IS NOT NULL AND LOWER(ownerId) != LOWER(:ownerId)))
+        """
+    )
+    suspend fun foreignOwnedIds(ids: List<UUID>, ownerId: String): List<UUID>
+
     /** Internal: the store owns the authorise-then-persist transaction. */
     @Upsert
     suspend fun upsert(categories: List<CategoryEntity>)
@@ -365,6 +380,16 @@ interface FriendDao {
 
     @Query("UPDATE friends SET ownerId = :ownerId WHERE ownerId IS NULL")
     suspend fun claimLegacyRows(ownerId: String): Int
+
+    @Query(
+        """
+        SELECT id FROM friends
+        WHERE id IN (:ids)
+          AND ownerId IS NOT NULL
+          AND LOWER(ownerId) != LOWER(:ownerId)
+        """
+    )
+    suspend fun foreignOwnedIds(ids: List<UUID>, ownerId: String): List<UUID>
 
     /** Internal: the store owns the authorise-then-persist transaction. */
     @Upsert

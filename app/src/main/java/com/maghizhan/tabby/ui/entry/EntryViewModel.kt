@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.maghizhan.tabby.data.local.CategoryStore
+import com.maghizhan.tabby.data.local.EntryWriter
 import com.maghizhan.tabby.data.local.ExpenseStore
 import com.maghizhan.tabby.data.local.entity.CategoryEntity
 import com.maghizhan.tabby.data.local.entity.ExpenseEntity
@@ -44,14 +44,15 @@ data class EntryUiState(
  * `ExpenseStore.save` is an upsert that handles both. Two classes would mean two
  * places to keep the owner check, the note cap and the sync trigger correct.
  *
- * Saving goes through [ExpenseStore], never a raw DAO upsert, so the
+ * Saving goes through [EntryWriter], never a raw DAO upsert, so the
  * authorise-then-persist transaction (foreign-owner refusal, money
  * normalisation, revision bump) applies to user writes exactly as it does to the
- * sync coordinator's.
+ * sync coordinator's — and a newly created category plus its expense commit
+ * atomically rather than leaving an orphan category behind.
  */
 class EntryViewModel(
+    private val entryWriter: EntryWriter,
     private val expenseStore: ExpenseStore,
-    private val categoryStore: CategoryStore,
     private val onLocalWrite: suspend () -> Unit,
     private val now: () -> Instant = Instant::now
 ) : ViewModel() {
@@ -134,10 +135,10 @@ class EntryViewModel(
      * Validates, resolves (or creates) the category, saves, and only then
      * triggers a sync.
      *
-     * The category is created BEFORE the expense and in its own store call: an
-     * expense references its category by name, and a row whose category does not
-     * exist locally would render with no accent and vanish from the breakdown
-     * until the next pull.
+     * The category and the expense commit in ONE transaction via [EntryWriter]:
+     * an expense references its category by name, so the category must exist
+     * locally — but creating it in a separate transaction left a visible orphan
+     * category behind whenever the expense save then failed or was cancelled.
      */
     fun submit(categories: List<CategoryEntity>, activeOwnerId: String?) {
         val state = _uiState.value
@@ -166,7 +167,9 @@ class EntryViewModel(
 
         viewModelScope.launch {
             try {
-                val categoryName = resolveCategory(categories, state.categoryQuery, owner)
+                val pending = pendingCategory(categories, state.categoryQuery, owner)
+                val categoryName = pending?.name
+                    ?: EntryForm.canonicalCategoryName(categories, state.categoryQuery)
                 val timestamp = now()
                 val entity = edited?.copy(
                     amount = amount,
@@ -195,7 +198,7 @@ class EntryViewModel(
                     ownerId = owner
                 )
 
-                expenseStore.save(entity, owner)
+                entryWriter.save(entity, pending, owner)
                 _uiState.update { it.copy(isSaving = false, saved = true, notice = null) }
 
                 // After the local commit, never before: a failed push must leave
@@ -223,34 +226,36 @@ class EntryViewModel(
          * view model is what makes these classes untestable.
          */
         fun factory(
+            entryWriter: EntryWriter,
             expenseStore: ExpenseStore,
-            categoryStore: CategoryStore,
             onLocalWrite: suspend () -> Unit
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { EntryViewModel(expenseStore, categoryStore, onLocalWrite) }
+            initializer { EntryViewModel(entryWriter, expenseStore, onLocalWrite) }
         }
     }
 
-    private suspend fun resolveCategory(
+    /**
+     * The category row that must be created for [query], or null when the query
+     * resolves to one that already exists.
+     *
+     * Returned rather than saved here: the caller persists it in the SAME
+     * transaction as the expense, so a failed expense save cannot leave the
+     * category behind.
+     */
+    private fun pendingCategory(
         categories: List<CategoryEntity>,
         query: String,
         owner: String
-    ): String {
-        val canonical = EntryForm.canonicalCategoryName(categories, query)
-        if (!EntryForm.isNewCategory(categories, query)) return canonical
-
-        categoryStore.save(
-            CategoryEntity(
-                id = UUID.randomUUID(),
-                name = canonical,
-                isDefault = false,
-                sortOrder = EntryForm.nextSortOrder(categories),
-                syncStateRaw = SyncState.LOCAL.raw,
-                remoteId = null,
-                ownerId = owner
-            ),
-            owner
+    ): CategoryEntity? {
+        if (!EntryForm.isNewCategory(categories, query)) return null
+        return CategoryEntity(
+            id = UUID.randomUUID(),
+            name = EntryForm.canonicalCategoryName(categories, query),
+            isDefault = false,
+            sortOrder = EntryForm.nextSortOrder(categories),
+            syncStateRaw = SyncState.LOCAL.raw,
+            remoteId = null,
+            ownerId = owner
         )
-        return canonical
     }
 }

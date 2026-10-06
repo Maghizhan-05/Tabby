@@ -121,3 +121,43 @@ class FriendStore(
     suspend fun markDeleted(entity: FriendEntity, activeOwnerId: String): FriendEntity =
         save(entity.copy(syncStateRaw = SyncState.DELETED.raw), activeOwnerId)
 }
+
+/**
+ * Persists an expense together with the category it may have just created, in
+ * ONE transaction.
+ *
+ * Why this exists: the entry sheet saved a newly typed category through
+ * `CategoryStore.save` and then the expense through `ExpenseStore.save` — two
+ * separate transactions. A failure, a cancellation (the user leaves, the process
+ * is killed) or a thrown money validation between them committed the category and
+ * not the expense, leaving a category the user never deliberately created
+ * sitting in the picker, with nothing pending to sync and no way to tell it apart
+ * from a real one. Either both land or neither does.
+ *
+ * It composes the two stores rather than reimplementing them, so the
+ * authorise-then-persist checks, money normalisation and revision bump are the
+ * same code for this path as for every other write. Room's `withTransaction` is
+ * reentrant, so the nested store transactions join this one rather than opening
+ * their own.
+ */
+class EntryWriter(
+    private val expenses: ExpenseStore,
+    private val categories: CategoryStore,
+    private val transactions: TransactionRunner
+) {
+    /**
+     * Saves [expense], first creating [newCategory] when one is supplied.
+     *
+     * Returns the stored expense. The category is created first because an
+     * expense references its category by name, and a row whose category does not
+     * exist locally renders with no accent and vanishes from the breakdown.
+     */
+    suspend fun save(
+        expense: ExpenseEntity,
+        newCategory: CategoryEntity?,
+        activeOwnerId: String
+    ): ExpenseEntity = transactions.inTransaction {
+        newCategory?.let { categories.save(it, activeOwnerId) }
+        expenses.save(expense, activeOwnerId)
+    }
+}

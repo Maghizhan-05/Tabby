@@ -3,6 +3,9 @@ package com.maghizhan.tabby.ui.entry
 import com.maghizhan.tabby.data.local.entity.CategoryEntity
 import com.maghizhan.tabby.data.local.entity.ExpenseEntity
 import java.math.BigDecimal
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 /**
  * The shared, UI-free core of quick entry and expense editing.
@@ -85,4 +88,31 @@ object EntryForm {
     /** The sort order a newly created category should take. */
     fun nextSortOrder(categories: List<CategoryEntity>): Int =
         (categories.maxOfOrNull { it.sortOrder } ?: 0) + 1
+
+    /**
+     * The value Material's date picker needs in order to preselect the same
+     * calendar day the user sees on the expense.
+     *
+     * `initialSelectedDateMillis` is interpreted as a UTC calendar date, so
+     * handing it the expense's raw instant selected the wrong day whenever the
+     * local offset pushed that instant across a UTC boundary — the day before in
+     * the morning east of UTC, the day after in the evening west of it. The local
+     * date is therefore re-expressed as UTC midnight.
+     */
+    fun datePickerInitialMillis(date: Instant, zone: ZoneId): Long =
+        date.atZone(zone).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+    /**
+     * The instant to store when the picker reports [pickedUtcMillis], keeping the
+     * time of day already on the expense.
+     *
+     * The picker's value is a UTC midnight, which is read back as a UTC calendar
+     * date and then re-anchored in the user's zone; choosing a date must not
+     * silently reset the clock to 00:00.
+     */
+    fun instantFromPickedDate(pickedUtcMillis: Long, current: Instant, zone: ZoneId): Instant {
+        val pickedDate = Instant.ofEpochMilli(pickedUtcMillis).atZone(ZoneOffset.UTC).toLocalDate()
+        val existingTime = current.atZone(zone).toLocalTime()
+        return pickedDate.atTime(existingTime).atZone(zone).toInstant()
+    }
 }

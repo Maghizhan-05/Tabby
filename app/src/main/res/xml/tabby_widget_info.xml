@@ -4,9 +4,13 @@
   are the modern equivalents and are honoured in preference on newer launchers;
   both are declared so the widget sizes correctly on older ones too.
 
+  maxResizeWidth/Height admit the medium presentation (the category breakdown),
+  which TabbyWidget selects through SizeMode.Responsive.
+
   updatePeriodMillis is 0: the system's minimum is 30 minutes, which is both too
-  slow to be useful and wasteful. The widget is refreshed by the app after a
-  write instead.
+  slow to be useful and wasteful. The app drives refreshes instead — see
+  WidgetUpdater, which is called after a committed local write, after a completed
+  sync run, and on sign-in / sign-out / account change.
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_description"

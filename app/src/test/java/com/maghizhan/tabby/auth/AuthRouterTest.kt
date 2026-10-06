@@ -3,6 +3,7 @@ package com.maghizhan.tabby.auth
 import com.maghizhan.tabby.data.remote.AuthError
 import com.maghizhan.tabby.data.remote.AuthServicing
 import com.maghizhan.tabby.data.remote.AuthSession
+import com.maghizhan.tabby.data.remote.InMemoryOAuthTransactionStore
 import com.maghizhan.tabby.ui.auth.AuthUiState
 import com.maghizhan.tabby.ui.auth.AuthViewModel
 import kotlinx.coroutines.CompletableDeferred
@@ -131,7 +132,9 @@ class AuthRouterTest {
             // The restore will answer "no persisted session" - the stale, losing answer.
             val fake = GatedAuthService(restoredSession = null, interactiveSession = sessionB)
             val observed = mutableListOf<AuthUiState>()
-            val viewModel = AuthViewModel(fake)
+            // Armed: a callback is only honoured when it corresponds to a
+            // sign-in this app began, so the test must model one.
+            val viewModel = AuthViewModel(fake, InMemoryOAuthTransactionStore(pending = true))
             val collector = launch { viewModel.uiState.toList(observed) }
 
             fake.restoreStarted.await()
