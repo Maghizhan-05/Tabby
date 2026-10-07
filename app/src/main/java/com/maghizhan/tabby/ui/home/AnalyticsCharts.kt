@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -75,6 +76,11 @@ fun CategoryDonut(
             (size.height - diameter) / 2f
         )
 
+        // A single slice would otherwise be drawn as an arc with a 1.6° gap and
+        // two rounded ends, which reads as a ring that failed to close. At 100%
+        // there is no neighbour to inset away from, so it is drawn whole.
+        val single = totals.count { it.total.signum() > 0 } == 1
+
         var startAngle = -90f
         totals.forEachIndexed { index, item ->
             val fraction = item.total
@@ -83,15 +89,35 @@ fun CategoryDonut(
             val sweep = fraction * 360f
             val dimmed = selectedCategory != null && selectedCategory != item.category
 
-            drawArc(
-                color = ringColor(index).copy(alpha = if (dimmed) 0.35f else 1f),
-                startAngle = startAngle + 0.8f,
-                sweepAngle = (sweep - 1.6f).coerceAtLeast(0.4f),
-                useCenter = false,
-                topLeft = topLeft,
-                size = Size(diameter, diameter),
-                style = Stroke(width = stroke, cap = StrokeCap.Butt)
-            )
+            if (single) {
+                drawArc(
+                    color = ringColor(index).copy(alpha = if (dimmed) 0.35f else 1f),
+                    startAngle = startAngle,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = Size(diameter, diameter),
+                    style = Stroke(width = stroke, cap = StrokeCap.Butt)
+                )
+            } else {
+                // Rounded caps with an angular inset, matching the iOS chart's
+                // `cornerRadius(3)` + `angularInset(1.5)`. The inset is taken in
+                // DEGREES scaled to the ring's radius so the visual gap stays
+                // constant whether the ring is the 150dp daily one or the 104dp
+                // breakdown one — a fixed degree inset looks twice as wide on
+                // the small ring.
+                val insetDegrees = (stroke / 2f) / (diameter / 2f) * (180f / Math.PI.toFloat())
+                val drawn = (sweep - insetDegrees * 2f).coerceAtLeast(0.6f)
+                drawArc(
+                    color = ringColor(index).copy(alpha = if (dimmed) 0.35f else 1f),
+                    startAngle = startAngle + (sweep - drawn) / 2f,
+                    sweepAngle = drawn,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = Size(diameter, diameter),
+                    style = Stroke(width = stroke, cap = StrokeCap.Round)
+                )
+            }
             startAngle += sweep
         }
     }
@@ -221,30 +247,55 @@ fun TrendLine(
     }
 }
 
-/** A two-column legend of the top categories, each row toggling selection. */
+/**
+ * A legend of the top categories, each row toggling selection.
+ *
+ * [columns] mirrors the two iOS layouts: the daily ring puts its legend BELOW a
+ * full-width chart in two columns (`LazyVGrid`), while the category breakdown
+ * puts it BESIDE a small ring in one. A single-column legend under the wide
+ * daily ring left half the card empty and pushed the rows off the card.
+ */
 @Composable
 fun CategoryLegend(
     totals: List<CategoryTotal>,
     selectedCategory: String?,
     onSelect: (String?) -> Unit,
     showAmounts: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    columns: Int = 1
 ) {
+    val shown = totals.take(6)
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        totals.take(6).forEachIndexed { index, item ->
-            val selected = selectedCategory == item.category
-            LegendRow(
-                label = item.category,
-                amount = if (showAmounts) item.total else null,
-                dotColor = ringColor(index),
-                selected = selected,
-                modifier = Modifier.clickable {
-                    onSelect(if (selected) null else item.category)
+        // Chunked into rows rather than a LazyVerticalGrid: this sits inside a
+        // vertically scrolling parent, and nesting a lazy grid in one throws on
+        // unbounded height. The list is capped at six, so there is nothing to
+        // virtualise anyway.
+        shown.indices.chunked(columns).forEach { rowIndices ->
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                rowIndices.forEach { index ->
+                    val item = shown[index]
+                    val selected = selectedCategory == item.category
+                    LegendRow(
+                        label = item.category,
+                        amount = if (showAmounts) item.total else null,
+                        dotColor = ringColor(index),
+                        selected = selected,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                onSelect(if (selected) null else item.category)
+                            }
+                    )
                 }
-            )
+                // Keeps a trailing odd item at one column's width instead of
+                // letting it stretch across the whole row.
+                repeat(columns - rowIndices.size) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
         }
     }
 }

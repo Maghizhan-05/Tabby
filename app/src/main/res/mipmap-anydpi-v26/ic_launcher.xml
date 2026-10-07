@@ -1,4 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  The app icon, taken from the iOS app's own asset
+  (SpendTracker/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png)
+  so both platforms ship the identical artwork.
+
+  The foreground is that PNG's coin cut out onto transparency and scaled so its
+  diameter fills the 66dp safe zone of the 108dp canvas; the background carries
+  the icon's own dark field, averaged from the pixels outside the coin.
+
+  Split this way rather than using the square as-is because an adaptive icon's
+  foreground is masked to whatever silhouette the launcher chooses, and the
+  outer 18dp of the canvas can be cropped entirely — a full-bleed square would
+  have the mask slice the coin's rim off. mipmap-*/ic_launcher.png keeps the
+  untouched square for pre-26 launchers, which have no adaptive-icon support.
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_background" />
     <foreground android:drawable="@drawable/ic_launcher_foreground" />

@@ -3,6 +3,7 @@ package com.maghizhan.tabby.widget
 import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -11,6 +12,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.Image
+import androidx.glance.ImageProvider
+import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
@@ -27,11 +31,14 @@ import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.background
 import androidx.glance.currentState
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
+import androidx.glance.layout.size
+import androidx.glance.layout.width
 import androidx.glance.layout.padding
 import androidx.glance.state.GlanceStateDefinition
 import androidx.glance.state.PreferencesGlanceStateDefinition
@@ -41,6 +48,7 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.maghizhan.tabby.MainActivity
 import com.maghizhan.tabby.ui.format.CurrencyFormat
+import com.maghizhan.tabby.ui.home.ringColor
 import com.maghizhan.tabby.ui.theme.TabbyPalette
 
 /** Per-widget persisted mode, so each placed instance keeps its own choice. */
@@ -148,10 +156,17 @@ class TabbyWidget : GlanceAppWidget() {
                 when {
                     snapshot == null -> SignedOutBody()
                     mode == WidgetMode.CATEGORIES && isMedium ->
-                        CategoryBody(snapshot = snapshot, rows = WidgetSnapshot.MAXIMUM_SLICES)
+                        // Medium: the ring beside its legend, as on the iOS
+                        // widget and the in-app breakdown.
+                        RingWithLegend(
+                            snapshot = snapshot,
+                            rows = WidgetSnapshot.MAXIMUM_SLICES,
+                            ringSize = 58.dp
+                        )
                     mode == WidgetMode.CATEGORIES ->
-                        // Small: one leading category, since four rows do not fit.
-                        CategoryBody(snapshot = snapshot, rows = 1)
+                        // Small: the ring alone with the leading category under
+                        // it. Four legend rows beside a ring do not fit a 2x1.
+                        RingWithLegend(snapshot = snapshot, rows = 1, ringSize = 44.dp)
                     else -> TotalBody(total = CurrencyFormat.compact(snapshot.total(mode)))
                 }
 
@@ -186,32 +201,77 @@ class TabbyWidget : GlanceAppWidget() {
         )
     }
 
+    /**
+     * The category ring beside (or above) its legend.
+     *
+     * The ring is a bitmap, not a drawn composable: Glance marshals its UI to
+     * the launcher as a `RemoteViews` tree, which has no canvas primitive, so
+     * the arc drawing the in-app chart uses is unavailable here. See
+     * [WidgetRing].
+     */
     @Composable
-    private fun CategoryBody(snapshot: WidgetSnapshot, rows: Int) {
+    private fun RingWithLegend(snapshot: WidgetSnapshot, rows: Int, ringSize: Dp) {
         if (snapshot.categorySlices.isEmpty()) {
             TotalBody(total = CurrencyFormat.compact(snapshot.total(WidgetMode.MONTH)))
             return
         }
-        Column(modifier = GlanceModifier.fillMaxWidth()) {
-            for (slice in snapshot.categorySlices.take(rows)) {
-                Row(modifier = GlanceModifier.fillMaxWidth()) {
-                    Text(
-                        text = slice.category,
-                        style = TextStyle(
-                            color = ColorProvider(TabbyPalette.ink),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
+
+        val density = LocalContext.current.resources.displayMetrics.density
+        val sizePx = (ringSize.value * density).toInt()
+        val ring = WidgetRing.render(
+            slices = snapshot.categorySlices,
+            sizePx = sizePx,
+            strokePx = sizePx * 0.19f
+        )
+
+        Row(
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Vertical.CenterVertically
+        ) {
+            if (ring != null) {
+                Image(
+                    provider = ImageProvider(ring),
+                    contentDescription = "Spending by category",
+                    modifier = GlanceModifier.size(ringSize)
+                )
+                Spacer(modifier = GlanceModifier.width(10.dp))
+            }
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                snapshot.categorySlices.take(rows).forEachIndexed { index, slice ->
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Vertical.CenterVertically
+                    ) {
+                        // The legend dot carries the slice's ring colour, so a
+                        // row can be matched to its arc. Without it the ring is
+                        // decorative and the legend unreadable.
+                        Box(
+                            modifier = GlanceModifier
+                                .size(7.dp)
+                                .cornerRadius(4.dp)
+                                .background(ColorProvider(ringColor(index)))
+                        ) {}
+                        Spacer(modifier = GlanceModifier.width(6.dp))
+                        Text(
+                            text = slice.category,
+                            maxLines = 1,
+                            style = TextStyle(
+                                color = ColorProvider(TabbyPalette.ink),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         )
-                    )
-                    Spacer(modifier = GlanceModifier.defaultWeight())
-                    Text(
-                        text = CurrencyFormat.compact(slice.total),
-                        style = TextStyle(
-                            color = ColorProvider(TabbyPalette.ink),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
+                        Spacer(modifier = GlanceModifier.defaultWeight())
+                        Text(
+                            text = CurrencyFormat.compact(slice.total),
+                            maxLines = 1,
+                            style = TextStyle(
+                                color = ColorProvider(TabbyPalette.ink),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         )
-                    )
+                    }
                 }
             }
         }

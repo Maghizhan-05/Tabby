@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--
-      The dark field behind the coin, matched to the iOS app icon's background
-      (sampled #0B0B12 at the corners, warming towards #221B16 at the centre).
-      Flat rather than a gradient: the launcher mask crops this layer and can
-      parallax-shift it, so a gradient lands differently on every launcher
-      while a flat field reads identically everywhere.
+      The dark field behind the coin, averaged from the iOS icon's own pixels
+      outside the coin rather than picked by eye. Flat rather than a gradient:
+      the launcher mask crops this layer and can parallax-shift it, so a
+      gradient lands differently on every launcher while a flat field reads
+      identically everywhere.
     -->
-    <color name="ic_launcher_background">#12100E</color>
+    <color name="ic_launcher_background">#151214</color>
+    <!--
+      Also the window background, so the cold-start frame the system draws
+      before Compose runs matches the app's own backdrop instead of flashing
+      white.
+    -->
+    <color name="tabby_window_background">#0D0B0C</color>
 </resources>

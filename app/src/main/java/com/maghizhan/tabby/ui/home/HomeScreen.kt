@@ -8,11 +8,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -26,7 +28,6 @@ import com.maghizhan.tabby.data.local.entity.ExpenseEntity
 import com.maghizhan.tabby.ui.common.TabbyCard
 import com.maghizhan.tabby.ui.theme.Tabby
 import com.maghizhan.tabby.ui.theme.TabbyOrbit
-import com.maghizhan.tabby.ui.theme.TabbyShapes
 
 /**
  * Home: the analytics card over recent activity, with a quick-entry FAB.
@@ -64,19 +65,22 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                TabbyOrbit(size = 30.dp, lineWidth = 2.dp)
+                TabbyOrbit(size = 28.dp, lineWidth = 2.5.dp)
                 Text(
                     text = "Tabby",
                     color = colors.ink,
-                    fontSize = 22.sp,
+                    fontSize = 25.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(onClick = onProfile) {
                     Icon(
-                        imageVector = Icons.Filled.Person,
+                        imageVector = Icons.Outlined.AccountCircle,
                         contentDescription = "Profile",
-                        tint = colors.accentBright
+                        // subtleInk, not gold: on iOS the profile glyph is quiet
+                        // chrome, and gold is reserved for focus and
+                        // confirmation. A gold icon here competed with the FAB.
+                        tint = colors.subtleInk
                     )
                 }
             }
@@ -105,13 +109,28 @@ fun HomeScreen(
                 }
 
                 item(key = "recent-header") {
-                    Text(
-                        text = "RECENT ACTIVITY",
-                        color = colors.subtleInk,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp
-                    )
+                    // Title-case headline with the gold LIVE badge, as on iOS.
+                    // The all-caps 11sp micro-label that was here read as a form
+                    // field label rather than a section heading.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Recent activity",
+                            color = colors.ink,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "LIVE",
+                            color = colors.accentBright,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                    }
                 }
 
                 recentEntries(
@@ -126,15 +145,23 @@ fun HomeScreen(
             onClick = onAddSpend,
             containerColor = colors.accent,
             contentColor = colors.paper,
-            shape = TabbyShapes.control,
+            // A capsule, not the 16dp control shape: iOS uses `Capsule()` here.
+            shape = CircleShape,
+            // The gold glow under the button, matching the iOS
+            // `.shadow(accentGlow, radius: 16, y: 6)`.
+            elevation = FloatingActionButtonDefaults.elevation(
+                defaultElevation = 10.dp,
+                pressedElevation = 6.dp
+            ),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(20.dp)
+                .padding(22.dp)
         ) {
             Icon(imageVector = Icons.Filled.Add, contentDescription = null)
             Text(
                 text = "Add spend",
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
                 modifier = Modifier.padding(start = 8.dp)
             )
         }

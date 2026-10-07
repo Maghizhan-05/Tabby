@@ -170,14 +170,17 @@ private fun PeriodDonutView(
                 innerRadiusRatio = 0.62f,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(150.dp)
+                    .height(160.dp)
             )
             SelectedSliceCallout(totals, selectedCategory)
             CategoryLegend(
                 totals = totals,
                 selectedCategory = selectedCategory,
                 onSelect = onCategorySelected,
-                showAmounts = false
+                showAmounts = false,
+                // Two columns under the full-width ring, as on iOS. One column
+                // left the right half of the card empty.
+                columns = 2
             )
         }
     }
