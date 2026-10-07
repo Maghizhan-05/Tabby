@@ -1,18 +1,89 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Tabby's orbit mark, approximated as a vector so the scaffold has a real
-     adaptive icon. Replaced with the exact asset at the UI checkpoint. -->
+<!--
+  Tabby's mark: the gold coin with a dollar sign, matched to the iOS app icon
+  (SpendTracker/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png)
+  so both platforms ship the same brand asset.
+
+  A vector rather than a resized export of the iOS PNG. That file is a
+  full-bleed 1024 square with its own dark background baked in, which is the
+  wrong shape for Android: an adaptive icon's foreground is masked to whatever
+  silhouette the launcher picks (circle, squircle, teardrop) and the outer 18dp
+  of the 108dp canvas can be cropped away entirely, so dropping the square in
+  as a foreground would have the mask slice the coin's rim off. Here the
+  background layer carries the dark field and the coin sits wholly inside the
+  72dp safe zone, so every mask shape shows the whole coin.
+
+  Colours are sampled from the iOS PNG, not guessed: the face runs #FFE7A8
+  (upper left) through #FACC62 and #C8902A to #8D601C (lower right), the milled
+  rim #E3B55E to #7C5516, and the glyph #6B4E24.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- Milled edge: the darker ring the face sits inside. -->
+    <path android:pathData="M54,21 a33,33 0 1,0 0,66 a33,33 0 1,0 0,-66 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="27" android:startY="27"
+                android:endX="81" android:endY="81"
+                android:type="linear">
+                <item android:offset="0" android:color="#FFE3B55E" />
+                <item android:offset="0.5" android:color="#FFC79A3C" />
+                <item android:offset="1" android:color="#FF7C5516" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Face. -->
+    <path android:pathData="M54,24.4 a29.6,29.6 0 1,0 0,59.2 a29.6,29.6 0 1,0 0,-59.2 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="31" android:startY="29"
+                android:endX="79" android:endY="80"
+                android:type="linear">
+                <item android:offset="0" android:color="#FFFFE7A8" />
+                <item android:offset="0.34" android:color="#FFFACC62" />
+                <item android:offset="0.68" android:color="#FFC8902A" />
+                <item android:offset="1" android:color="#FF8D601C" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Inner hairline, a touch inside the face edge. -->
     <path
+        android:pathData="M54,27.6 a26.4,26.4 0 1,0 0,52.8 a26.4,26.4 0 1,0 0,-52.8"
         android:fillColor="#00000000"
-        android:strokeColor="#E8B04B"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:pathData="M54,30 A24,24 0 1 1 36,42" />
+        android:strokeColor="#40000000"
+        android:strokeWidth="0.7" />
+
+    <!-- Top gloss: the bright arc across the coin's upper face. -->
     <path
-        android:fillColor="#F3C96B"
-        android:pathData="M70,38 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+        android:pathData="M31.5,42 Q54,26.5 76.5,42"
+        android:fillColor="#00000000"
+        android:strokeColor="#B3FFF6D8"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round" />
+
+    <!--
+      The dollar sign: an S over a full-height vertical bar, matching the
+      proportions of the iOS glyph.
+    -->
+    <group android:translateX="54" android:translateY="54">
+        <path
+            android:pathData="M8.6,-9.2 C6.4,-12.4 2.6,-14.2 -1.4,-14.2 C-7.4,-14.2 -11.4,-10.8 -11.4,-6 C-11.4,-1.2 -7.6,1 -1.6,2.4 C4.4,3.8 7.2,5 7.2,8.2 C7.2,11.6 3.8,13.8 -0.8,13.8 C-5.2,13.8 -8.6,11.8 -10.6,8"
+            android:fillColor="#00000000"
+            android:strokeColor="#FF6B4E24"
+            android:strokeWidth="6.4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M-1.4,-19.6 L-1.4,19.6"
+            android:fillColor="#00000000"
+            android:strokeColor="#FF6B4E24"
+            android:strokeWidth="2.9" />
+    </group>
 </vector>
