@@ -86,12 +86,14 @@ class TabbyWidget : GlanceAppWidget() {
 
         // Built here, where a real Context exists; Glance's composition runs in
         // a restricted environment without LocalContext.
-        val quickEntry = Intent(context, MainActivity::class.java).apply {
-            putExtra(MainActivity.EXTRA_QUICK_ENTRY, true)
-            // A fresh request id per tap: the activity records the last request
-            // it consumed, so a reused id would be ignored as already handled.
-            putExtra(MainActivity.EXTRA_QUICK_ENTRY_REQUEST_ID, System.currentTimeMillis())
-        }
+        //
+        // Deliberately carries NO request id. Glance builds this into a
+        // PendingIntent while the content is RENDERED, not when it is tapped, so
+        // an id written here is frozen for the lifetime of the render and every
+        // tap delivers the same one — which the activity then discarded as
+        // already handled, so Quick Entry opened once per render and never
+        // again. The id is minted on arrival by QuickEntryRouter instead.
+        val quickEntry = quickEntryIntent(context)
 
         provideContent {
             val mode = WidgetMode.fromName(currentState(WIDGET_MODE_KEY))
@@ -237,6 +239,19 @@ class TabbyWidget : GlanceAppWidget() {
     internal companion object {
         val SMALL_SIZE = DpSize(160.dp, 80.dp)
         val MEDIUM_SIZE = DpSize(250.dp, 110.dp)
+
+        /**
+         * The Intent behind the widget's "+ Add spend" target.
+         *
+         * Extracted so a test can exercise the SAME intent production uses: the
+         * defect it guards against is one rendered widget's action being tapped
+         * twice, which only reproduces if the test reuses one instance of this
+         * intent rather than constructing a fresh one per tap.
+         */
+        internal fun quickEntryIntent(context: Context): Intent =
+            Intent(context, MainActivity::class.java).apply {
+                putExtra(MainActivity.EXTRA_QUICK_ENTRY, true)
+            }
     }
 }
 

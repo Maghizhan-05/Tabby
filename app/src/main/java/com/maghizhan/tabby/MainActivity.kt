@@ -12,7 +12,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.maghizhan.tabby.data.MainActivityExtras
 import com.maghizhan.tabby.data.QuickEntryLauncher
+import com.maghizhan.tabby.data.QuickEntryRouter
 import com.maghizhan.tabby.data.remote.OAuthCallback
 import com.maghizhan.tabby.ui.auth.AuthUiState
 import com.maghizhan.tabby.ui.auth.AuthViewModel
@@ -50,21 +52,30 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * The last quick-entry request this activity has already raised.
+     * Whether this activity's RETAINED intent has already opened quick entry.
      *
-     * Saved instance state, because the triggering intent is RETAINED by the
-     * activity: without it, a recreation re-read the same intent and raised the
-     * request again, reopening a sheet the user had already used.
+     * Held in a retained [androidx.lifecycle.ViewModel] rather than saved
+     * instance state. Both survive a rotation, but saved state ALSO survives
+     * process death — and a widget tap that relaunches a killed process is a
+     * genuinely new request arriving on a restored activity, which the saved
+     * flag wrongly suppressed. A retained view model has exactly the lifetime
+     * this guard needs: cleared with the process, kept across configuration
+     * changes.
      */
-    private var lastQuickEntryRequestId: Long = 0L
+    private val quickEntryState: QuickEntryActivityState by viewModels()
 
-    /** Same problem, same fix, for the OAuth callback URL. */
+    /**
+     * The OAuth callback URL already exchanged.
+     *
+     * Still saved instance state: unlike a quick-entry tap, an authorisation
+     * code is single-use, so re-presenting it after process death must stay
+     * suppressed.
+     */
     private var handledCallbackUrl: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        lastQuickEntryRequestId = savedInstanceState?.getLong(STATE_QUICK_ENTRY_ID) ?: 0L
         handledCallbackUrl = savedInstanceState?.getString(STATE_HANDLED_CALLBACK)
 
         // Sync runs when a session becomes available, which is the first moment
@@ -128,7 +139,7 @@ class MainActivity : ComponentActivity() {
 
         // A launcher shortcut or widget tap. Handled alongside the OAuth
         // callback because both arrive as intents on this same activity.
-        handleQuickEntry(intent)
+        handleQuickEntry(intent, QuickEntryRouter.Delivery.CREATE)
 
         // The cold-start path: the app was launched BY the callback, so the
         // intent is already on the activity and onNewIntent will never fire for
@@ -138,9 +149,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        // Both are "already handled" markers for data the activity's retained
-        // intent will present again after recreation.
-        outState.putLong(STATE_QUICK_ENTRY_ID, lastQuickEntryRequestId)
+        // Only the callback URL: the quick-entry guard deliberately lives in a
+        // retained view model, so that a tap which relaunches a killed process
+        // is still treated as a new request. See [quickEntryState].
         handledCallbackUrl?.let { outState.putString(STATE_HANDLED_CALLBACK, it) }
     }
 
@@ -150,7 +161,7 @@ class MainActivity : ComponentActivity() {
         // Keep the activity's own intent current so a later getIntent() sees it.
         setIntent(intent)
         handleCallback(intent)
-        handleQuickEntry(intent)
+        handleQuickEntry(intent, QuickEntryRouter.Delivery.NEW_INTENT)
     }
 
     /**
@@ -161,34 +172,27 @@ class MainActivity : ComponentActivity() {
      * host to the exported OAuth filter would widen the app's attack surface
      * for no benefit.
      *
-     * A request carries an id, and an id already raised is ignored. Removing the
-     * extra is not sufficient on its own: the activity can be recreated from the
-     * retained intent, and the pending request itself used to be a monotonic
-     * counter that stayed non-zero forever, so the sheet reopened on rotation.
+     * The decision of whether this delivery is a real request, and the id it
+     * carries, both belong to [QuickEntryRouter] — see its documentation for why
+     * the id cannot come from inside the intent (the widget's PendingIntent is
+     * built at RENDER time, so every tap on one rendered widget would reuse the
+     * same id and only the first would open the sheet).
      */
-    private fun handleQuickEntry(intent: Intent?) {
-        if (intent?.getBooleanExtra(EXTRA_QUICK_ENTRY, false) != true) return
+    private fun handleQuickEntry(intent: Intent?, delivery: QuickEntryRouter.Delivery) {
+        val requestId = QuickEntryRouter.route(
+            intent = intent,
+            delivery = delivery,
+            retainedIntentAlreadyConsumed = quickEntryState.retainedIntentConsumed
+        ) ?: return
 
-        // Shortcuts carry no id of their own; the arrival time is the id.
-        val requestId = intent.getLongExtra(EXTRA_QUICK_ENTRY_REQUEST_ID, 0L)
-            .takeIf { it != 0L } ?: System.currentTimeMillis()
-
-        if (requestId == lastQuickEntryRequestId) return
-        lastQuickEntryRequestId = requestId
-
-        intent.removeExtra(EXTRA_QUICK_ENTRY)
-        intent.removeExtra(EXTRA_QUICK_ENTRY_REQUEST_ID)
+        quickEntryState.retainedIntentConsumed = true
         QuickEntryLauncher.request(requestId)
     }
 
     companion object {
         /** Set by the launcher shortcut and the widget's tap action. */
-        const val EXTRA_QUICK_ENTRY = "com.maghizhan.tabby.extra.QUICK_ENTRY"
+        const val EXTRA_QUICK_ENTRY = MainActivityExtras.QUICK_ENTRY
 
-        /** Distinguishes a new request from a retained intent being replayed. */
-        const val EXTRA_QUICK_ENTRY_REQUEST_ID = "com.maghizhan.tabby.extra.QUICK_ENTRY_ID"
-
-        private const val STATE_QUICK_ENTRY_ID = "lastQuickEntryRequestId"
         private const val STATE_HANDLED_CALLBACK = "handledCallbackUrl"
     }
 
