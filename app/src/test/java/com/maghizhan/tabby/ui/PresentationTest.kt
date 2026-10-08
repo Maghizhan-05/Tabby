@@ -3,6 +3,7 @@ package com.maghizhan.tabby.ui
 import com.maghizhan.tabby.data.local.DefaultCategories
 import com.maghizhan.tabby.data.local.entity.ExpenseEntity
 import com.maghizhan.tabby.data.sync.SyncState
+import com.maghizhan.tabby.ui.common.AmountTypography
 import com.maghizhan.tabby.ui.format.CurrencyFormat
 import com.maghizhan.tabby.ui.home.recentEntryTitle
 import com.maghizhan.tabby.ui.theme.CategoryAccent
@@ -83,6 +84,16 @@ class PresentationTest {
         assertTrue(!zero.startsWith("+") && !zero.startsWith("-"))
     }
 
+    @Test
+    fun `signed stays in rupees regardless of device locale`() {
+        // iOS puts every Friends amount through WidgetCurrencyFormatter, so the
+        // net must not switch to the device's own currency: a "+$300" net beside
+        // "₹500" and "₹200" columns is three currencies in one row.
+        assertTrue(CurrencyFormat.signed(BigDecimal("300"), Locale.US).startsWith("+₹"))
+        assertTrue(CurrencyFormat.signed(BigDecimal("-300"), Locale.US).startsWith("-₹"))
+        assertTrue(CurrencyFormat.signed(BigDecimal.ZERO, Locale.US).startsWith("₹"))
+    }
+
     // MARK: - Category accents
 
     @Test
@@ -122,6 +133,46 @@ class PresentationTest {
     @Test
     fun `accent and ink are distinguishable`() {
         assertNotEquals(TabbyPalette.ink, TabbyPalette.accent)
+    }
+
+    // MARK: - Amount headline sizing
+
+    @Test
+    fun `a short amount renders at the full iOS headline size`() {
+        // "₹66.91" is well within the comfortable width, so it must NOT shrink.
+        assertEquals(
+            AmountTypography.BASE_SP,
+            AmountTypography.fontSizeSp("₹66.91".length),
+            0.001f
+        )
+    }
+
+    @Test
+    fun `a long amount shrinks rather than clipping the user's money`() {
+        val long = "₹12,34,567.89"
+        val size = AmountTypography.fontSizeSp(long.length)
+        assertTrue("a 13-glyph amount must step down from 40sp", size < AmountTypography.BASE_SP)
+        assertTrue("and must stay legible", size >= AmountTypography.MINIMUM_SP)
+    }
+
+    @Test
+    fun `the step-down never goes below the iOS half-size floor`() {
+        // iOS pins minimumScaleFactor(0.5); an absurd amount must hit that floor
+        // and stop, not vanish.
+        assertEquals(
+            AmountTypography.MINIMUM_SP,
+            AmountTypography.fontSizeSp(500),
+            0.001f
+        )
+    }
+
+    @Test
+    fun `the step-down is monotonic in length`() {
+        val sizes = (1..60).map { AmountTypography.fontSizeSp(it) }
+        assertTrue(
+            "a longer amount must never render larger than a shorter one",
+            sizes.zipWithNext().all { (a, b) -> b <= a }
+        )
     }
 
     // MARK: - Seeded defaults

@@ -23,21 +23,25 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maghizhan.tabby.data.local.entity.FriendEntity
+import com.maghizhan.tabby.ui.common.TABULAR_FIGURES
 import com.maghizhan.tabby.ui.common.TabbyCard
 import com.maghizhan.tabby.ui.format.CurrencyFormat
 import com.maghizhan.tabby.ui.theme.Tabby
@@ -67,21 +71,25 @@ fun FriendsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 18.dp),
+                // 16dp, matching Home and the iOS screen margin.
+                .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 10.dp),
+                    .padding(top = 8.dp)
+                    .padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                TabbyOrbit(size = 28.dp, lineWidth = 2.dp)
+                // Same mark geometry as Home's header; 28dp/2dp here made the
+                // two tabs' titles sit at visibly different heights.
+                TabbyOrbit(size = 26.dp, lineWidth = 2.5.dp)
                 Text(
                     text = "Friends",
                     color = colors.ink,
-                    fontSize = 22.sp,
+                    fontSize = 25.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
@@ -100,11 +108,16 @@ fun FriendsScreen(
                         text = CurrencyFormat.signed(aggregateNet),
                         color = when {
                             aggregateNet.signum() > 0 -> colors.accentBright
-                            aggregateNet.signum() < 0 -> colors.ink
+                            // Red, as on iOS: "you owe overall" is not neutral
+                            // ink, and ink alone left the two directions
+                            // indistinguishable at a glance.
+                            aggregateNet.signum() < 0 -> colors.negative
                             else -> colors.subtleInk
                         },
                         fontSize = 30.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR_FIGURES)
                     )
                     Text(
                         text = when {
@@ -149,7 +162,9 @@ fun FriendsScreen(
                     HeaderCell("THEY OWE", weight = 1f, align = TextAlign.End)
                     HeaderCell("YOU OWE", weight = 1f, align = TextAlign.End)
                     HeaderCell("NET", weight = 1f, align = TextAlign.End)
-                    Box(modifier = Modifier.size(40.dp))
+                    // Matches the row's 34dp delete button so the NET column
+                    // header sits over the NET values rather than beside them.
+                    Box(modifier = Modifier.size(34.dp))
                 }
                 HorizontalDivider(color = colors.hairline)
 
@@ -199,18 +214,25 @@ fun FriendsScreen(
                             AmountCell(friend.weOweThem, colors.ink, 1f)
                             Text(
                                 text = CurrencyFormat.signed(net),
-                                color = if (net.signum() >= 0) colors.accentBright else colors.ink,
+                                // Red for a negative net, as on iOS; ink made
+                                // "they owe you" and "you owe them" look alike.
+                                color = if (net.signum() >= 0) colors.accentBright else colors.negative,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = TextAlign.End,
                                 maxLines = 1,
+                                style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR_FIGURES),
                                 modifier = Modifier.weight(1f)
                             )
-                            IconButton(onClick = { onDelete(friend) }) {
+                            IconButton(
+                                onClick = { onDelete(friend) },
+                                modifier = Modifier.size(34.dp)
+                            ) {
                                 Icon(
                                     imageVector = Icons.Filled.Delete,
                                     contentDescription = "Delete ${friend.name}",
-                                    tint = colors.subtleInk
+                                    tint = colors.subtleInk,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -224,15 +246,30 @@ fun FriendsScreen(
             onClick = onAdd,
             containerColor = colors.accent,
             contentColor = colors.paper,
-            shape = TabbyShapes.control,
+            // Capsule and gold glow, identical to Home's FAB: two differently
+            // shaped primary buttons on sibling tabs read as two apps.
+            shape = CircleShape,
+            elevation = FloatingActionButtonDefaults.elevation(
+                defaultElevation = 0.dp,
+                pressedElevation = 0.dp,
+                focusedElevation = 0.dp,
+                hoveredElevation = 0.dp
+            ),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(20.dp)
+                .padding(end = 22.dp, bottom = 22.dp)
+                .shadow(
+                    elevation = 16.dp,
+                    shape = CircleShape,
+                    ambientColor = colors.accentGlow,
+                    spotColor = colors.accent
+                )
         ) {
             Icon(imageVector = Icons.Filled.Add, contentDescription = null)
             Text(
                 text = "Add friend",
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
                 modifier = Modifier.padding(start = 8.dp)
             )
         }
@@ -269,6 +306,9 @@ private fun androidx.compose.foundation.layout.RowScope.AmountCell(
         fontSize = 14.sp,
         textAlign = TextAlign.End,
         maxLines = 1,
+        // Tabular figures so the three money columns line up down the table —
+        // the iOS row uses `.monospacedDigit()` for the same reason.
+        style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR_FIGURES),
         modifier = Modifier.weight(weight)
     )
 }

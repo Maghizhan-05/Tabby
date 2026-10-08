@@ -63,14 +63,19 @@ object CurrencyFormat {
     /**
      * A net balance with an explicit sign.
      *
+     * Built on [compact], not [full]: iOS routes every Friends amount through
+     * `WidgetCurrencyFormatter`, so the whole screen is rupees. Formatting the
+     * net with the device locale instead put a "+$300" net next to "₹500" and
+     * "₹200" columns in the same row — three currencies for one balance.
+     *
      * A leading "+" is added for a positive net because the two directions mean
      * opposite things on the Friends screen ("owed to you" versus "you owe"),
      * and colour alone cannot carry that for a colour-blind user.
      */
     fun signed(amount: BigDecimal, locale: Locale = Locale.getDefault()): String = when {
-        amount.signum() > 0 -> "+${full(amount, locale)}"
-        amount.signum() < 0 -> "-${full(amount.abs(), locale)}"
-        else -> full(BigDecimal.ZERO, locale)
+        amount.signum() > 0 -> "+${compact(amount, locale)}"
+        amount.signum() < 0 -> "-${compact(amount.abs(), locale)}"
+        else -> compact(BigDecimal.ZERO, locale)
     }
 
     /** One decimal, with a trailing `.0` dropped — "12K", not "12.0K". */

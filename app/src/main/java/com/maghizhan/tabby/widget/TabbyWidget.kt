@@ -155,19 +155,34 @@ class TabbyWidget : GlanceAppWidget() {
 
                 when {
                     snapshot == null -> SignedOutBody()
-                    mode == WidgetMode.CATEGORIES && isMedium ->
+                    // Per MODE, not per account: iOS decides its empty state
+                    // from the slices of the period being shown, so a widget on
+                    // TODAY says "No spending yet" on a quiet day even though
+                    // the month has spending. Checking only "has this account
+                    // ever spent" rendered a bare ₹0 instead.
+                    snapshot.isEmpty(mode) -> EmptyBody()
+                    // A ring in EVERY presentation, as on iOS, built from the
+                    // selected period's own slices. Only CATEGORIES drew one
+                    // before, so TODAY and THIS WEEK were a bare number on a
+                    // widget whose whole point is the ring.
+                    isMedium ->
                         // Medium: the ring beside its legend, as on the iOS
                         // widget and the in-app breakdown.
                         RingWithLegend(
                             snapshot = snapshot,
+                            mode = mode,
                             rows = WidgetSnapshot.MAXIMUM_SLICES,
                             ringSize = 58.dp
                         )
-                    mode == WidgetMode.CATEGORIES ->
-                        // Small: the ring alone with the leading category under
-                        // it. Four legend rows beside a ring do not fit a 2x1.
-                        RingWithLegend(snapshot = snapshot, rows = 1, ringSize = 44.dp)
-                    else -> TotalBody(total = CurrencyFormat.compact(snapshot.total(mode)))
+                    else ->
+                        // Small: the ring with the leading category under it.
+                        // Four legend rows beside a ring do not fit a 2x1.
+                        RingWithLegend(
+                            snapshot = snapshot,
+                            mode = mode,
+                            rows = 1,
+                            ringSize = 44.dp
+                        )
                 }
 
                 Spacer(modifier = GlanceModifier.defaultWeight())
@@ -210,16 +225,26 @@ class TabbyWidget : GlanceAppWidget() {
      * [WidgetRing].
      */
     @Composable
-    private fun RingWithLegend(snapshot: WidgetSnapshot, rows: Int, ringSize: Dp) {
-        if (snapshot.categorySlices.isEmpty()) {
-            TotalBody(total = CurrencyFormat.compact(snapshot.total(WidgetMode.MONTH)))
+    private fun RingWithLegend(
+        snapshot: WidgetSnapshot,
+        mode: WidgetMode,
+        rows: Int,
+        ringSize: Dp
+    ) {
+        // The SELECTED mode's slices and total, not the month's. Hardcoding the
+        // month drew a ring of the month's categories under a "TODAY" header
+        // with the month's rupee figure in its centre — three different periods
+        // in one widget.
+        val slices = snapshot.slices(mode)
+        if (slices.isEmpty()) {
+            TotalBody(total = CurrencyFormat.compact(snapshot.total(mode)))
             return
         }
 
         val density = LocalContext.current.resources.displayMetrics.density
         val sizePx = (ringSize.value * density).toInt()
         val ring = WidgetRing.render(
-            slices = snapshot.categorySlices,
+            slices = slices,
             sizePx = sizePx,
             strokePx = sizePx * 0.19f
         )
@@ -229,15 +254,35 @@ class TabbyWidget : GlanceAppWidget() {
             verticalAlignment = Alignment.Vertical.CenterVertically
         ) {
             if (ring != null) {
-                Image(
-                    provider = ImageProvider(ring),
-                    contentDescription = "Spending by category",
-                    modifier = GlanceModifier.size(ringSize)
-                )
+                // The ring's centre carries the period total, as on the iOS
+                // widget — an unlabelled ring makes the user open the app to
+                // learn what it adds up to. Glance has no canvas, so the label
+                // is stacked over the bitmap in a Box rather than drawn into it;
+                // keeping it as text means it still scales with the user's font
+                // size, which a rasterised label would not.
+                Box(
+                    modifier = GlanceModifier.size(ringSize),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        provider = ImageProvider(ring),
+                        contentDescription = "Spending by category",
+                        modifier = GlanceModifier.size(ringSize)
+                    )
+                    Text(
+                        text = CurrencyFormat.compact(snapshot.total(mode)),
+                        maxLines = 1,
+                        style = TextStyle(
+                            color = ColorProvider(TabbyPalette.ink),
+                            fontSize = if (ringSize >= 58.dp) 12.sp else 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
                 Spacer(modifier = GlanceModifier.width(10.dp))
             }
             Column(modifier = GlanceModifier.defaultWeight()) {
-                snapshot.categorySlices.take(rows).forEachIndexed { index, slice ->
+                slices.take(rows).forEachIndexed { index, slice ->
                     Row(
                         modifier = GlanceModifier.fillMaxWidth(),
                         verticalAlignment = Alignment.Vertical.CenterVertically
@@ -256,7 +301,10 @@ class TabbyWidget : GlanceAppWidget() {
                             text = slice.category,
                             maxLines = 1,
                             style = TextStyle(
-                                color = ColorProvider(TabbyPalette.ink),
+                                // Quieter than the amount, as on the iOS widget
+                                // (white at 0.78 beside solid white): the number
+                                // is what the row is for.
+                                color = ColorProvider(TabbyPalette.subtleInk),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium
                             )
@@ -275,6 +323,24 @@ class TabbyWidget : GlanceAppWidget() {
                 }
             }
         }
+    }
+
+    /**
+     * Rendered when this account is signed in but the chosen period has no
+     * spending — the iOS widget's "No spending yet", not a bare ₹0.
+     */
+    @Composable
+    private fun EmptyBody() {
+        Text(
+            text = "No spending yet",
+            style = TextStyle(
+                color = ColorProvider(TabbyPalette.subtleInk),
+                fontSize = 13.sp,
+                // Glance's FontWeight has only Normal/Medium/Bold — there is no
+                // SemiBold slot to match the iOS caption weight.
+                fontWeight = FontWeight.Medium
+            )
+        )
     }
 
     /**

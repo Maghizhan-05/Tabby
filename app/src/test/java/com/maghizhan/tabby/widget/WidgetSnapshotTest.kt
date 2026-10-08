@@ -3,6 +3,7 @@ package com.maghizhan.tabby.widget
 import com.maghizhan.tabby.data.local.entity.ExpenseEntity
 import com.maghizhan.tabby.data.sync.SyncState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -146,6 +147,90 @@ class WidgetSnapshotTest {
             snapshot.total(WidgetMode.MONTH),
             slicesTotal
         )
+    }
+
+    @Test
+    fun `an empty period is empty even when another period has spending`() {
+        // The widget's empty state is per MODE, as on iOS: a quiet day shows
+        // "No spending yet" rather than ₹0 while the month still totals.
+        val lastMonth = Instant.parse("2025-12-20T06:00:00Z")
+        val snapshot = build(ownerA, listOf(expense(ownerA, "80.00", date = lastMonth)))
+
+        assertTrue("today had no spending", snapshot.isEmpty(WidgetMode.DAY))
+        assertTrue("this month had no spending", snapshot.isEmpty(WidgetMode.MONTH))
+    }
+
+    @Test
+    fun `a period with spending is not empty`() {
+        val snapshot = build(ownerA, listOf(expense(ownerA, "10.00")))
+
+        for (mode in WidgetMode.entries) {
+            assertFalse(
+                "${mode.name} must render its total, not the empty state",
+                snapshot.isEmpty(mode)
+            )
+        }
+    }
+
+    @Test
+    fun `categories is empty when no slice is positive`() {
+        // Drives the CATEGORIES branch specifically: it reads the slices, not a
+        // period total, so a month total without slices must still be empty.
+        val snapshot = WidgetSnapshot(
+            ownerId = ownerA,
+            periodTotals = mapOf(WidgetMode.MONTH.name to "25.00"),
+            categorySlices = emptyList()
+        )
+        assertTrue(snapshot.isEmpty(WidgetMode.CATEGORIES))
+        assertFalse(snapshot.isEmpty(WidgetMode.MONTH))
+    }
+
+    @Test
+    fun `the signed-out snapshot is empty in every mode`() {
+        for (mode in WidgetMode.entries) {
+            assertTrue(WidgetSnapshot.SIGNED_OUT.isEmpty(mode))
+        }
+    }
+
+    @Test
+    fun `every mode carries its own ring slices`() {
+        // iOS draws a ring in every presentation from that period's slices. With
+        // only the month's slices stored, TODAY and THIS WEEK had nothing to draw
+        // and fell back to a bare number — the most visible widget difference.
+        val lastMonth = Instant.parse("2025-12-10T06:00:00Z")
+        val snapshot = WidgetSnapshotFactory.build(
+            ownerId = ownerA,
+            expenses = listOf(
+                expense(ownerA, "500", category = "Food"),
+                expense(ownerA, "250", category = "Transport"),
+                expense(ownerA, "900", category = "Rent", date = lastMonth)
+            ),
+            now = now,
+            zone = zone,
+            locale = Locale.US
+        )
+
+        val today = snapshot.slices(WidgetMode.DAY)
+        assertEquals(setOf("Food", "Transport"), today.map { it.category }.toSet())
+        assertEquals(BigDecimal("750"), today.fold(BigDecimal.ZERO) { s, it -> s.add(it.total) })
+
+        // Last month's rent is outside every stored period, so no ring carries it.
+        assertTrue(snapshot.slices(WidgetMode.MONTH).none { it.category == "Rent" })
+    }
+
+    @Test
+    fun `an old snapshot without per-mode slices still draws its category ring`() {
+        // Deserialized from a build that predates slicesByMode: the category ring
+        // must fall back to categorySlices rather than render blank until the app
+        // next runs.
+        val legacy = WidgetSnapshot(
+            ownerId = ownerA,
+            periodTotals = mapOf(WidgetMode.CATEGORIES.name to "500"),
+            categorySlices = listOf(WidgetCategorySlice("Food", "500"))
+        )
+
+        assertEquals(1, legacy.slices(WidgetMode.CATEGORIES).size)
+        assertFalse(legacy.isEmpty(WidgetMode.CATEGORIES))
     }
 
     @Test

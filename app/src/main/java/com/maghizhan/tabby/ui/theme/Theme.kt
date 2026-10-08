@@ -38,6 +38,15 @@ data class TabbyColors(
     val accentBright: Color,
     val accentDim: Color,
     val accentGlow: Color,
+    /**
+     * Money owed outward / a negative net.
+     *
+     * A named token rather than reaching for `Color.Red`: it is the ONE place
+     * the palette says "this number is against you", it is shared by Friends'
+     * rows and its aggregate footer, and it matches the iOS
+     * `.red.opacity(0.82)` exactly.
+     */
+    val negative: Color,
     val ringColors: List<Color>
 )
 
@@ -93,6 +102,17 @@ object TabbyPalette {
     val accentDim = Color(red = 0.48f, green = 0.32f, blue = 0.10f)
     val accentGlow = accent.copy(alpha = 0.22f)
 
+    /**
+     * The iOS `.red.opacity(0.82)` used for a negative net, pre-composited over
+     * [paper].
+     *
+     * Composited rather than left translucent because it is also handed to
+     * Material's `error` role and to Glance, neither of which reliably blends an
+     * alpha colour against the surface beneath it; a flat value renders the same
+     * everywhere.
+     */
+    val negative = Color(red = 0.83f, green = 0.17f, blue = 0.18f)
+
     /** Seven chart ring colours, in the iOS order. */
     val ringColors = listOf(
         accentBright,
@@ -115,6 +135,7 @@ object TabbyPalette {
         accentBright = accentBright,
         accentDim = accentDim,
         accentGlow = accentGlow,
+        negative = negative,
         ringColors = ringColors
     )
 }
@@ -152,7 +173,7 @@ private val TabbyDarkColorScheme = darkColorScheme(
     onSurfaceVariant = TabbyPalette.subtleInk,
     outline = TabbyPalette.subtleInk,
     outlineVariant = TabbyPalette.hairline,
-    error = Color(red = 0.93f, green = 0.35f, blue = 0.33f)
+    error = TabbyPalette.negative
 )
 
 /**

@@ -18,8 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -54,7 +54,9 @@ fun ProfileScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 18.dp),
+            // 16dp, matching Home and Friends; 18dp made the profile
+            // sheet's cards sit narrower than the screen behind it.
+            .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         TopBar(title = "Profile", onBack = onBack)
@@ -116,13 +118,19 @@ fun ProfileScreen(
             shape = TabbyShapes.control,
             colors = ButtonDefaults.buttonColors(
                 containerColor = colors.elevatedSurface,
-                contentColor = colors.ink
+                // Destructive red, as on iOS: sign-out is the one action on this
+                // screen that throws work away, and neutral ink made it look
+                // like another navigation row.
+                contentColor = colors.negative
             ),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 20.dp)
         ) {
-            Icon(imageVector = Icons.Filled.Lock, contentDescription = null)
+            // An exit arrow, matching the iOS
+            // `rectangle.portrait.and.arrow.right`. A padlock said "locked",
+            // which is the opposite of what the button does.
+            Icon(imageVector = Icons.AutoMirrored.Filled.Logout, contentDescription = null)
             Text(
                 text = "Sign Out",
                 fontWeight = FontWeight.SemiBold,
@@ -157,7 +165,7 @@ fun ManageCategoriesScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 18.dp),
+            .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         TopBar(title = "Categories", onBack = onBack)

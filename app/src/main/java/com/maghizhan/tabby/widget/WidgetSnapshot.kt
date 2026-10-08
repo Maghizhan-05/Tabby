@@ -1,6 +1,7 @@
 package com.maghizhan.tabby.widget
 
 import com.maghizhan.tabby.data.local.entity.ExpenseEntity
+import com.maghizhan.tabby.ui.home.CategoryTotal
 import com.maghizhan.tabby.ui.home.PeriodUnit
 import com.maghizhan.tabby.ui.home.SpendingAnalytics
 import kotlinx.serialization.Serializable
@@ -71,15 +72,46 @@ data class WidgetSnapshot(
     /** Keyed by [WidgetMode.name] so adding a mode cannot break deserialization. */
     val periodTotals: Map<String, String> = emptyMap(),
     val categorySlices: List<WidgetCategorySlice> = emptyList(),
+    /**
+     * Slices for EVERY mode, keyed by [WidgetMode.name].
+     *
+     * iOS draws a ring in every presentation except trends, each from its own
+     * period's slices. With only the month's slices stored, TODAY and THIS WEEK
+     * had nothing to draw a ring from and fell back to a bare number, which is
+     * the most visible difference between the two widgets.
+     *
+     * Added alongside [categorySlices] rather than replacing it so a snapshot
+     * written by an older build still deserializes instead of leaving the widget
+     * blank until the app next runs.
+     */
+    val slicesByMode: Map<String, List<WidgetCategorySlice>> = emptyMap(),
     val generatedAtEpochMillis: Long = 0L
 ) {
     fun total(mode: WidgetMode): BigDecimal =
         periodTotals[mode.name]?.let { runCatching { BigDecimal(it) }.getOrNull() } ?: BigDecimal.ZERO
 
+    /** The ring slices for [mode], falling back to the month's for old snapshots. */
+    fun slices(mode: WidgetMode): List<WidgetCategorySlice> =
+        slicesByMode[mode.name] ?: if (mode == WidgetMode.CATEGORIES) categorySlices else emptyList()
+
     val hasSpending: Boolean
         get() = periodTotals.values.any {
             (runCatching { BigDecimal(it) }.getOrNull() ?: BigDecimal.ZERO).signum() > 0
         }
+
+    /**
+     * True when the presentation [mode] has nothing to draw.
+     *
+     * Per mode rather than per account, matching the iOS widget: it renders
+     * "No spending yet" from the SELECTED period's slices, so a quiet day shows
+     * the empty state even when the month has spending. A global
+     * "has this account ever spent" check instead drew a bare ₹0, which reads
+     * as a broken widget rather than a quiet day.
+     */
+    fun isEmpty(mode: WidgetMode): Boolean = when (mode) {
+        WidgetMode.CATEGORIES -> slices(mode).none { it.total.signum() > 0 }
+        else -> total(mode).signum() <= 0
+    }
 
     companion object {
         /** Shown when signed out: zeros, never another account's numbers. */
@@ -123,10 +155,33 @@ object WidgetSnapshotFactory {
             SpendingAnalytics.inRange(own, monthStart, monthEnd)
         )
 
-        // Everything past the first few categories is aggregated rather than
-        // dropped, so the listed rows still sum to the displayed month total —
-        // the same rule as the iOS ring.
-        val slices = if (ranked.size <= WidgetSnapshot.MAXIMUM_SLICES) {
+        // Every mode gets its OWN slices so the widget can draw a ring in each,
+        // as iOS does. Computing only the month's left TODAY and THIS WEEK with
+        // no ring at all.
+        val slicesByMode = WidgetMode.entries.associate { mode ->
+            val (start, end) = SpendingAnalytics.intervalOf(mode.period, now, zone, locale)
+            mode.name to rankedSlices(
+                SpendingAnalytics.totalsByCategory(SpendingAnalytics.inRange(own, start, end))
+            )
+        }
+
+        return WidgetSnapshot(
+            ownerId = owner,
+            periodTotals = totals,
+            categorySlices = rankedSlices(ranked),
+            slicesByMode = slicesByMode,
+            generatedAtEpochMillis = now.toEpochMilli()
+        )
+    }
+
+    /**
+     * The top categories, with the tail aggregated into "Other".
+     *
+     * Aggregated rather than dropped so the listed rows still sum to the
+     * displayed period total — the same rule as the iOS ring.
+     */
+    private fun rankedSlices(ranked: List<CategoryTotal>): List<WidgetCategorySlice> =
+        if (ranked.size <= WidgetSnapshot.MAXIMUM_SLICES) {
             ranked.map { WidgetCategorySlice(it.category, it.total.toPlainString()) }
         } else {
             val top = ranked.take(WidgetSnapshot.MAXIMUM_SLICES)
@@ -135,12 +190,4 @@ object WidgetSnapshotFactory {
             top.map { WidgetCategorySlice(it.category, it.total.toPlainString()) } +
                 WidgetCategorySlice("Other", remainder.toPlainString())
         }
-
-        return WidgetSnapshot(
-            ownerId = owner,
-            periodTotals = totals,
-            categorySlices = slices,
-            generatedAtEpochMillis = now.toEpochMilli()
-        )
-    }
 }

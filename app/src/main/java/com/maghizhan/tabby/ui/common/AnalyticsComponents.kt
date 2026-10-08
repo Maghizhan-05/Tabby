@@ -12,10 +12,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
@@ -42,10 +44,41 @@ fun TabbyCard(
     ) { content() }
 }
 
+/**
+ * The size the analytics amount is rendered at, for a given rendered length.
+ *
+ * Compose (on this BOM) has no `autoSize` text and no equivalent of the iOS
+ * `minimumScaleFactor(0.5)`, so a long amount — "₹12,34,567.89" is thirteen
+ * glyphs — either wraps or is clipped at a fixed size. The step-down reproduces
+ * iOS's behaviour: the headline renders at the full 40sp until it stops fitting
+ * and then shrinks, never below half, which is iOS's floor.
+ *
+ * A pure function rather than a layout trick so the rule is unit-testable; a
+ * headline that silently clips the user's money is not something to leave to a
+ * visual check.
+ */
+object AmountTypography {
+    /** iOS `.system(size: 40, weight: .bold)`. */
+    const val BASE_SP = 40f
+
+    /** iOS `minimumScaleFactor(0.5)`. */
+    const val MINIMUM_SP = BASE_SP / 2f
+
+    /** Glyphs that fit at [BASE_SP] across a phone-width analytics card. */
+    const val COMFORTABLE_LENGTH = 9
+
+    fun fontSizeSp(renderedLength: Int): Float {
+        if (renderedLength <= COMFORTABLE_LENGTH) return BASE_SP
+        val scaled = BASE_SP * COMFORTABLE_LENGTH / renderedLength.toFloat()
+        return scaled.coerceAtLeast(MINIMUM_SP)
+    }
+}
+
 /** The dominant amount typography used across analytics headers. */
 @Composable
 fun AmountHeadline(title: String, amount: BigDecimal, modifier: Modifier = Modifier) {
     val colors = Tabby.colors
+    val rendered = CurrencyFormat.full(amount)
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -59,15 +92,23 @@ fun AmountHeadline(title: String, amount: BigDecimal, modifier: Modifier = Modif
             letterSpacing = 1.sp
         )
         Text(
-            text = CurrencyFormat.full(amount),
+            text = rendered,
             color = colors.ink,
-            fontSize = 34.sp,
+            // 40sp, matching iOS, instead of the 34sp this was: the headline is
+            // the single dominant element of the card on both platforms.
+            fontSize = AmountTypography.fontSizeSp(rendered.length).sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
+            // Digits share one advance width, so a ticking total does not make
+            // the headline jitter — the iOS `.monospacedDigit()`.
+            style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR_FIGURES),
             textAlign = TextAlign.Center
         )
     }
 }
+
+/** OpenType tabular figures; the Compose spelling of iOS's `monospacedDigit()`. */
+internal const val TABULAR_FIGURES = "tnum"
 
 /** Shown in place of a chart when the selected period has no spending. */
 @Composable
@@ -78,10 +119,13 @@ fun EmptyAnalytics(modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .heightIn(min = 140.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        // 6dp between the orbit and the caption, as on iOS. The previous
+        // `Spacer(Modifier.width(6.dp))` set a HORIZONTAL size inside a Column,
+        // so it contributed no gap at all and the caption sat against the mark.
+        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically)
     ) {
-        TabbyOrbit(size = 34.dp, lineWidth = 2.dp)
-        Spacer(Modifier.width(6.dp))
+        // .opacity(0.8) on iOS: the empty-state mark is quieter than the header's.
+        TabbyOrbit(size = 34.dp, lineWidth = 2.dp, modifier = Modifier.alpha(0.8f))
         Text(text = "No spending yet", color = colors.subtleInk, fontSize = 13.sp)
     }
 }
@@ -125,11 +169,15 @@ fun LegendRow(
         )
         if (amount != null) {
             Text(
-                text = CurrencyFormat.compact(amount),
+                // Full currency, as on iOS — the breakdown legend is the place
+                // the user reads exact per-category spend; `compact` turned
+                // ₹12,340 into "₹12.3K" and lost the rupees.
+                text = CurrencyFormat.full(amount),
                 color = colors.subtleInk,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
+                style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR_FIGURES),
                 // The amount never shrinks for the label; it is the data.
                 softWrap = false
             )
