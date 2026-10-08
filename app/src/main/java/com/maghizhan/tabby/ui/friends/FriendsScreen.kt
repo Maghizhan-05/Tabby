@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,12 +27,12 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -43,6 +44,10 @@ import androidx.compose.ui.unit.sp
 import com.maghizhan.tabby.data.local.entity.FriendEntity
 import com.maghizhan.tabby.ui.common.TABULAR_FIGURES
 import com.maghizhan.tabby.ui.common.TabbyCard
+import androidx.compose.ui.graphics.Color
+import com.maghizhan.tabby.ui.common.SwipeAction
+import com.maghizhan.tabby.ui.common.SwipeActionsRow
+import com.maghizhan.tabby.ui.common.rememberSwipeRevealController
 import com.maghizhan.tabby.ui.format.CurrencyFormat
 import com.maghizhan.tabby.ui.theme.Tabby
 import com.maghizhan.tabby.ui.theme.TabbyOrbit
@@ -66,6 +71,7 @@ fun FriendsScreen(
     modifier: Modifier = Modifier
 ) {
     val colors = Tabby.colors
+    val swipeController = rememberSwipeRevealController()
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -162,13 +168,19 @@ fun FriendsScreen(
                     HeaderCell("THEY OWE", weight = 1f, align = TextAlign.End)
                     HeaderCell("YOU OWE", weight = 1f, align = TextAlign.End)
                     HeaderCell("NET", weight = 1f, align = TextAlign.End)
-                    // Matches the row's 34dp delete button so the NET column
-                    // header sits over the NET values rather than beside them.
-                    Box(modifier = Modifier.size(34.dp))
+                    // No trailing spacer any more: the delete button it used to
+                    // align with is now a swipe action, so NET runs to the edge
+                    // exactly as its values do.
                 }
                 HorizontalDivider(color = colors.hairline)
 
+                val listState = rememberLazyListState()
+                LaunchedEffect(listState.isScrollInProgress) {
+                    if (listState.isScrollInProgress) swipeController.closeAll()
+                }
+
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.weight(1f),
                     // Same reason as Home: the FAB would otherwise cover the
                     // last friend's delete button.
@@ -176,10 +188,27 @@ fun FriendsScreen(
                 ) {
                     items(items = friends, key = { it.id }) { friend ->
                         val net = friend.netBalance
+                        // Swipe to delete, same gesture as the Home list. A
+                        // permanent trash icon in every row is the Android
+                        // habit the iOS app deliberately does not have: it puts
+                        // a destructive control one mis-tap away and steals the
+                        // width the NET column needs.
+                        SwipeActionsRow(
+                            controller = swipeController,
+                            onClick = { onEdit(friend) },
+                            actions = listOf(
+                                SwipeAction(
+                                    label = "Delete",
+                                    icon = Icons.Filled.Delete,
+                                    background = colors.negative,
+                                    contentColor = Color.White,
+                                    onClick = { onDelete(friend) }
+                                )
+                            )
+                        ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onEdit(friend) }
                                 .padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -224,17 +253,7 @@ fun FriendsScreen(
                                 style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR_FIGURES),
                                 modifier = Modifier.weight(1f)
                             )
-                            IconButton(
-                                onClick = { onDelete(friend) },
-                                modifier = Modifier.size(34.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Delete,
-                                    contentDescription = "Delete ${friend.name}",
-                                    tint = colors.subtleInk,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                        }
                         }
                         HorizontalDivider(color = colors.hairline)
                     }

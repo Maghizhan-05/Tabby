@@ -115,7 +115,16 @@ class TabbyWidget : GlanceAppWidget() {
         mode: WidgetMode,
         quickEntry: Intent
     ) {
-        val isMedium = LocalSize.current.width >= MEDIUM_SIZE.width
+        val size = LocalSize.current
+        val isMedium = size.width >= MEDIUM_SIZE.width
+        // The ring grows with the cell. A fixed 58dp ring looked deliberate in a
+        // 2-row widget and lost in a 4-row one; the launcher lets the user
+        // resize, so the art has to answer that.
+        val ringSize = when {
+            !isMedium -> 44.dp
+            size.height >= TALL_HEIGHT -> 86.dp
+            else -> 58.dp
+        }
         GlanceTheme {
             Column(
                 modifier = GlanceModifier
@@ -153,6 +162,14 @@ class TabbyWidget : GlanceAppWidget() {
                     )
                 }
 
+                // The body CENTRES in whatever height the launcher gave the
+                // widget. Top-aligned with a single spacer above the footer, a
+                // tall cell pinned the ring to the top third and left an empty
+                // void beneath it — the widget looked broken rather than roomy.
+                Box(
+                    modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
+                    contentAlignment = Alignment.CenterStart
+                ) {
                 when {
                     snapshot == null -> SignedOutBody()
                     // Per MODE, not per account: iOS decides its empty state
@@ -172,7 +189,7 @@ class TabbyWidget : GlanceAppWidget() {
                             snapshot = snapshot,
                             mode = mode,
                             rows = WidgetSnapshot.MAXIMUM_SLICES,
-                            ringSize = 58.dp
+                            ringSize = ringSize
                         )
                     else ->
                         // Small: the ring with the leading category under it.
@@ -181,11 +198,10 @@ class TabbyWidget : GlanceAppWidget() {
                             snapshot = snapshot,
                             mode = mode,
                             rows = 1,
-                            ringSize = 44.dp
+                            ringSize = ringSize
                         )
                 }
-
-                Spacer(modifier = GlanceModifier.defaultWeight())
+                }
 
                 // A SEPARATE action from the header, so cycling the mode and
                 // logging a spend are distinct targets.
@@ -365,6 +381,9 @@ class TabbyWidget : GlanceAppWidget() {
     internal companion object {
         val SMALL_SIZE = DpSize(160.dp, 80.dp)
         val MEDIUM_SIZE = DpSize(250.dp, 110.dp)
+
+        /** Past this the launcher has given us a tall cell worth a larger ring. */
+        val TALL_HEIGHT = 180.dp
 
         /**
          * The Intent behind the widget's "+ Add spend" target.

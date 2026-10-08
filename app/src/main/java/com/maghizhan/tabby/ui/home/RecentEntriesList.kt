@@ -1,7 +1,6 @@
 package com.maghizhan.tabby.ui.home
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,8 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +25,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maghizhan.tabby.data.local.entity.ExpenseEntity
+import com.maghizhan.tabby.ui.common.SwipeAction
+import com.maghizhan.tabby.ui.common.SwipeActionsRow
+import com.maghizhan.tabby.ui.common.SwipeRevealController
 import com.maghizhan.tabby.ui.common.TABULAR_FIGURES
 import com.maghizhan.tabby.ui.format.CurrencyFormat
 import com.maghizhan.tabby.ui.theme.CategoryAccent
@@ -65,16 +65,19 @@ private val DATE_FORMAT: DateTimeFormatter by lazy {
 /**
  * Recent spending, deliberately quiet so the analytics visual stays primary.
  *
- * Edit and Delete are explicit icon buttons rather than a swipe gesture. Compose
- * has no 1:1 `.swipeActions`, and a swipe-to-dismiss would make Delete the
- * easiest action on a destructive operation against financial records; visible
- * buttons are also reachable by a screen reader and by switch access, which a
- * swipe-only affordance is not.
+ * Edit and Delete are revealed by swiping a row left, as on iOS, rather than
+ * sitting on it as two permanent icon buttons. The buttons were the single
+ * biggest reason the list looked unfinished beside iOS: every row carried two
+ * controls competing with the amount, so a list of five spends showed ten
+ * icons. See [SwipeActionsRow] for why this is not `SwipeToDismissBox` and how
+ * the actions stay reachable without the gesture.
  */
 fun LazyListScope.recentEntries(
     expenses: List<ExpenseEntity>,
     onEdit: (ExpenseEntity) -> Unit,
     onDelete: (ExpenseEntity) -> Unit,
+    /** Shared so only one row's actions are ever revealed. */
+    swipeController: SwipeRevealController,
     zone: ZoneId = ZoneId.systemDefault()
 ) {
     if (expenses.isEmpty()) {
@@ -107,11 +110,33 @@ fun LazyListScope.recentEntries(
 
     items(items = expenses, key = { it.id }) { expense ->
         val colors = Tabby.colors
+        SwipeActionsRow(
+            controller = swipeController,
+            onClick = { onEdit(expense) },
+            actions = listOf(
+                SwipeAction(
+                    label = "Edit",
+                    icon = Icons.Filled.Edit,
+                    background = colors.accent,
+                    contentColor = colors.paper,
+                    onClick = { onEdit(expense) }
+                ),
+                // Delete sits at the trailing EDGE, the native position on both
+                // platforms, so the destructive action is where the thumb
+                // expects it and is never the one revealed first.
+                SwipeAction(
+                    label = "Delete",
+                    icon = Icons.Filled.Delete,
+                    background = colors.negative,
+                    contentColor = colors.ink,
+                    onClick = { onDelete(expense) }
+                )
+            )
+        ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onEdit(expense) }
-                .padding(vertical = 5.dp),
+                .padding(vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -185,35 +210,13 @@ fun LazyListScope.recentEntries(
                 // number is the point of the row.
                 softWrap = false
             )
-
-            // 34dp visual boxes rather than the default 48: two full-size icon
-            // buttons crowded the amount off a narrow row, which iOS avoids by
-            // hiding both behind a swipe. IconButton still applies
-            // `minimumInteractiveComponentSize`, so the TOUCH target stays 48dp
-            // and the control remains reachable.
-            IconButton(
-                onClick = { onEdit(expense) },
-                modifier = Modifier.size(34.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Edit,
-                    contentDescription = "Edit ${recentEntryTitle(expense)}",
-                    tint = colors.accent,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            IconButton(
-                onClick = { onDelete(expense) },
-                modifier = Modifier.size(34.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = "Delete ${recentEntryTitle(expense)}",
-                    tint = colors.subtleInk,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
         }
-        HorizontalDivider(color = colors.hairline)
+        }
+        // Inset to the text column, as on iOS: a divider running the full bleed
+        // boxes every row in and makes the list look like a table.
+        HorizontalDivider(
+            color = colors.hairline,
+            modifier = Modifier.padding(start = 42.dp)
+        )
     }
 }

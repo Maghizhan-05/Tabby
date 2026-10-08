@@ -3,7 +3,19 @@ package com.maghizhan.tabby.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -33,6 +45,15 @@ import com.maghizhan.tabby.ui.theme.Tabby
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.ZoneId
+
+/**
+ * The Categories ring's ceiling.
+ *
+ * Sized against the legend beside it, not the card: the ring may grow until the
+ * legend's longest "Category  ₹amount" line would start to wrap. Past this the
+ * row stops reading as a chart WITH a key and starts clipping category names.
+ */
+private val CATEGORY_RING_MAX = 164.dp
 
 /**
  * The chart height used when the panel is NOT given a height to fill — previews,
@@ -87,7 +108,23 @@ fun AnalyticsPanel(
         // one screen and left dead space under it on another.
         val bodyModifier = if (fillHeight) Modifier.weight(1f) else Modifier
 
-        when (mode) {
+        // Switching presentation cross-fades and lifts, the port of the iOS
+        // `.transition(.opacity.combined(with: .scale(scale: 0.98)))`. Without
+        // it the card's whole contents teleport on every pill tap, which is the
+        // clearest "unfinished" tell in the app: the data is right, the change
+        // just has no craft to it.
+        AnimatedContent(
+            targetState = mode,
+            transitionSpec = {
+                (
+                    fadeIn(tween(220, delayMillis = 40)) +
+                        scaleIn(initialScale = 0.98f, animationSpec = tween(260, delayMillis = 40))
+                    ) togetherWith fadeOut(tween(140))
+            },
+            modifier = bodyModifier,
+            label = "analyticsMode"
+        ) { shown ->
+        when (shown) {
             AnalyticsMode.DAILY -> PeriodDonutView(
                 title = "Today",
                 expenses = expenses,
@@ -96,7 +133,7 @@ fun AnalyticsPanel(
                 onCategorySelected = onCategorySelected,
                 now = now,
                 zone = zone,
-                modifier = bodyModifier
+                fillHeight = fillHeight
             )
 
             AnalyticsMode.WEEKLY -> PeriodBarView(
@@ -108,7 +145,7 @@ fun AnalyticsPanel(
                 labelPattern = "EEE",
                 now = now,
                 zone = zone,
-                modifier = bodyModifier
+                fillHeight = fillHeight
             )
 
             AnalyticsMode.MONTHLY -> PeriodBarView(
@@ -120,7 +157,7 @@ fun AnalyticsPanel(
                 labelPattern = "'W'w",
                 now = now,
                 zone = zone,
-                modifier = bodyModifier
+                fillHeight = fillHeight
             )
 
             AnalyticsMode.YEARLY -> PeriodBarView(
@@ -135,22 +172,23 @@ fun AnalyticsPanel(
                 labelPattern = "MMMMM",
                 now = now,
                 zone = zone,
-                modifier = bodyModifier
+                fillHeight = fillHeight
             )
 
             AnalyticsMode.CATEGORIES -> CategoryBreakdownView(
                 expenses = expenses,
                 selectedCategory = selectedCategory,
                 onCategorySelected = onCategorySelected,
-                modifier = bodyModifier
+                fillHeight = fillHeight
             )
 
             AnalyticsMode.TRENDS -> TrendsView(
                 expenses = expenses,
                 now = now,
                 zone = zone,
-                modifier = bodyModifier
+                fillHeight = fillHeight
             )
+        }
         }
     }
 }
@@ -170,15 +208,38 @@ private fun ModeSelector(
     ) {
         AnalyticsMode.entries.forEach { candidate ->
             val selected = candidate == mode
+            // The pill's fill and its label CROSS-FADE rather than switching on
+            // the frame of the tap. A hard swap is the difference between a
+            // control that feels built and one that feels like a toggle someone
+            // wired up; iOS animates the same change with a spring.
+            val fill by animateColorAsState(
+                targetValue = if (selected) colors.accent else Color.Transparent,
+                animationSpec = tween(durationMillis = 220),
+                label = "modePillFill"
+            )
+            val labelColor by animateColorAsState(
+                targetValue = if (selected) colors.paper else colors.subtleInk,
+                animationSpec = tween(durationMillis = 220),
+                label = "modePillLabel"
+            )
+
             Text(
                 text = candidate.label,
-                color = if (selected) colors.paper else colors.subtleInk,
+                color = labelColor,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                softWrap = false,
                 modifier = Modifier
-                    .background(if (selected) colors.accent else Color.Transparent, CircleShape)
-                    .clickable { onModeSelected(candidate) }
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .background(fill, CircleShape)
+                    .clip(CircleShape)
+                    // No ripple: a grey Material splash on a gold capsule is the
+                    // most obviously un-iOS thing a tap can do here.
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onModeSelected(candidate) }
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
             )
         }
     }
@@ -194,29 +255,42 @@ private fun PeriodDonutView(
     onCategorySelected: (String?) -> Unit,
     now: Instant,
     zone: ZoneId,
-    modifier: Modifier = Modifier
+    fillHeight: Boolean = false
 ) {
     val (start, end) = SpendingAnalytics.intervalOf(unit, now, zone)
     val inPeriod = SpendingAnalytics.inRange(expenses, start, end)
     val totals = SpendingAnalytics.totalsByCategory(inPeriod)
-    val filling = modifier != Modifier
+    val filling = fillHeight
 
     Column(
-        modifier = modifier,
+        modifier = if (fillHeight) Modifier.fillMaxSize() else Modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         AmountHeadline(title = title, amount = SpendingAnalytics.total(inPeriod))
         if (totals.isEmpty()) {
             EmptyAnalytics()
         } else {
-            CategoryDonut(
-                totals = totals,
-                selectedCategory = selectedCategory,
-                innerRadiusRatio = 0.62f,
+            // Boxed and centred rather than `fillMaxWidth`: the donut draws
+            // into the SMALLER of its two dimensions, so a full-width, short
+            // canvas produced a ring sized by the leftover height with wide
+            // dead margins either side of it. The box takes the width, the ring
+            // takes the height, and the result is centred and as large as the
+            // card allows.
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .chartHeight(this, filling)
-            )
+                    .chartHeight(this, filling),
+                contentAlignment = Alignment.Center
+            ) {
+                CategoryDonut(
+                    totals = totals,
+                    selectedCategory = selectedCategory,
+                    innerRadiusRatio = 0.62f,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .aspectRatio(1f)
+                )
+            }
             SelectedSliceCallout(totals, selectedCategory)
             CategoryLegend(
                 totals = totals,
@@ -242,9 +316,9 @@ private fun PeriodBarView(
     labelPattern: String,
     now: Instant,
     zone: ZoneId,
-    modifier: Modifier = Modifier
+    fillHeight: Boolean = false
 ) {
-    val filling = modifier != Modifier
+    val filling = fillHeight
     val (start, end) = SpendingAnalytics.intervalOf(windowUnit, now, zone)
     val windowTotal = SpendingAnalytics.total(SpendingAnalytics.inRange(expenses, start, end))
     val byBucket = SpendingAnalytics.totalsByPeriod(
@@ -257,7 +331,7 @@ private fun PeriodBarView(
     )
 
     Column(
-        modifier = modifier,
+        modifier = if (fillHeight) Modifier.fillMaxSize() else Modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         AmountHeadline(title = title, amount = windowTotal)
@@ -280,13 +354,13 @@ private fun CategoryBreakdownView(
     expenses: List<ExpenseEntity>,
     selectedCategory: String?,
     onCategorySelected: (String?) -> Unit,
-    modifier: Modifier = Modifier
+    fillHeight: Boolean = false
 ) {
-    val filling = modifier != Modifier
+    val filling = fillHeight
     val totals = SpendingAnalytics.totalsByCategory(expenses)
 
     Column(
-        modifier = modifier,
+        modifier = if (fillHeight) Modifier.fillMaxSize() else Modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         AmountHeadline(title = "By Category", amount = SpendingAnalytics.total(expenses))
@@ -314,7 +388,7 @@ private fun CategoryBreakdownView(
                     // already claimed the row's full height and the cap did
                     // nothing — the ring filled half the card on device.
                     modifier = Modifier
-                        .sizeIn(maxWidth = 120.dp, maxHeight = 120.dp)
+                        .sizeIn(maxWidth = CATEGORY_RING_MAX, maxHeight = CATEGORY_RING_MAX)
                         .fillMaxHeight()
                         .aspectRatio(1f)
                 )
@@ -336,9 +410,9 @@ private fun TrendsView(
     expenses: List<ExpenseEntity>,
     now: Instant,
     zone: ZoneId,
-    modifier: Modifier = Modifier
+    fillHeight: Boolean = false
 ) {
-    val filling = modifier != Modifier
+    val filling = fillHeight
     val last30 = SpendingAnalytics.totalsByPeriod(
         expenses = expenses,
         unit = PeriodUnit.DAY,
@@ -350,7 +424,7 @@ private fun TrendsView(
     val trendTotal = last30.fold(BigDecimal.ZERO) { sum, point -> sum.add(point.total) }
 
     Column(
-        modifier = modifier,
+        modifier = if (fillHeight) Modifier.fillMaxSize() else Modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         AmountHeadline(title = "Last 30 Days", amount = trendTotal)

@@ -18,6 +18,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
@@ -38,11 +41,35 @@ fun TabbyCard(
     val colors = Tabby.colors
     Box(
         modifier = modifier
-            .background(colors.surface.copy(alpha = 0.82f), TabbyShapes.card)
+            // A soft drop shadow under the card. On iOS the card reads as a pane
+            // LIFTED off the backdrop; a flat fill with a hairline border made
+            // the Android card look painted onto the background, which is most
+            // of why the screen felt less considered. Ambient/spot are tinted to
+            // near-black rather than Material's default grey-blue haze.
+            .shadow(
+                elevation = 18.dp,
+                shape = TabbyShapes.card,
+                ambientColor = CARD_SHADOW,
+                spotColor = CARD_SHADOW
+            )
+            // The fill goes INSIDE a vertical gradient: a single flat colour on a
+            // 400dp-tall card bands visibly against the backdrop's own gradient.
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        colors.surface.copy(alpha = 0.92f),
+                        colors.surface.copy(alpha = 0.74f)
+                    )
+                ),
+                TabbyShapes.card
+            )
             .border(1.dp, colors.hairline, TabbyShapes.card)
             .padding(18.dp)
     ) { content() }
 }
+
+/** Near-black card shadow; Material's default grey reads as haze on this palette. */
+private val CARD_SHADOW = Color(0xFF000000)
 
 /**
  * The size the analytics amount is rendered at, for a given rendered length.

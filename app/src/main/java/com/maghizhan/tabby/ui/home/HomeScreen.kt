@@ -20,7 +20,9 @@ import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maghizhan.tabby.data.local.entity.ExpenseEntity
 import com.maghizhan.tabby.ui.common.TabbyCard
+import com.maghizhan.tabby.ui.common.rememberSwipeRevealController
 import com.maghizhan.tabby.ui.theme.Tabby
 import com.maghizhan.tabby.ui.theme.TabbyOrbit
 
@@ -119,8 +122,19 @@ fun HomeScreen(
             val analyticsHeight =
                 LocalConfiguration.current.screenHeightDp.dp * IOS_ANALYTICS_HEIGHT_FRACTION
 
+            val listState = rememberLazyListState()
+            val swipeController = rememberSwipeRevealController()
+
+            // Scrolling dismisses an open row's actions. Leaving it open while
+            // the list moves under the thumb puts a Delete button wherever the
+            // finger happens to land.
+            LaunchedEffect(listState.isScrollInProgress) {
+                if (listState.isScrollInProgress) swipeController.closeAll()
+            }
+
             Box(modifier = Modifier.weight(1f)) {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     // Clears the FAB so the last row's Edit/Delete stay tappable.
                     contentPadding = PaddingValues(bottom = 96.dp),
@@ -175,7 +189,8 @@ fun HomeScreen(
                     recentEntries(
                         expenses = expenses,
                         onEdit = onEditExpense,
-                        onDelete = onDeleteExpense
+                        onDelete = onDeleteExpense,
+                        swipeController = swipeController
                     )
                 }
             }
