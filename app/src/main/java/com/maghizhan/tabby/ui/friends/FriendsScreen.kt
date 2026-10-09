@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maghizhan.tabby.data.local.entity.FriendEntity
+import com.maghizhan.tabby.ui.common.AutoShrinkText
 import com.maghizhan.tabby.ui.common.TabbyCard
 import androidx.compose.ui.graphics.Color
 import com.maghizhan.tabby.ui.common.SwipeAction
@@ -300,14 +301,16 @@ private fun androidx.compose.foundation.layout.RowScope.HeaderCell(
     weight: Float,
     align: TextAlign
 ) {
-    Text(
+    AutoShrinkText(
         text = text,
         color = Tabby.colors.subtleInk,
         fontSize = 10.sp,
+        // 8sp floor: still legible for an all-caps tracked label, and enough
+        // range for "THEY OWE" to fit the ~50dp column on a 320dp screen.
+        minFontSize = 8.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = 0.8.sp,
         textAlign = align,
-        maxLines = 1,
         modifier = Modifier.weight(weight)
     )
 }
