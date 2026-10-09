@@ -3,8 +3,10 @@ package com.maghizhan.tabby.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,7 +35,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -199,10 +205,67 @@ private fun ModeSelector(
     onModeSelected: (AnalyticsMode) -> Unit
 ) {
     val colors = Tabby.colors
+    val scrollState = rememberScrollState()
+
+    // Six modes cannot fit 288dp of usable width at a legible size, so the row
+    // scrolls — it always did. What was wrong is that it gave no sign of it:
+    // "Yearly" was sliced mid-word at the right edge and read as a layout bug
+    // rather than as more content. A fade at each live edge is the iOS cue that
+    // a rail continues, and it appears only on the side that actually has more,
+    // so a fully-scrolled rail shows no false affordance.
+    val fadeStart by animateFloatAsState(
+        targetValue = if (scrollState.value > 0) 1f else 0f,
+        animationSpec = tween(durationMillis = 160),
+        label = "modeFadeStart"
+    )
+    val fadeEnd by animateFloatAsState(
+        targetValue = if (scrollState.value < scrollState.maxValue) 1f else 0f,
+        animationSpec = tween(durationMillis = 160),
+        label = "modeFadeEnd"
+    )
+
     Row(
         modifier = Modifier
-            .horizontalScroll(rememberScrollState())
             .background(colors.elevatedSurface.copy(alpha = 0.82f), CircleShape)
+            .clip(CircleShape)
+            // Drawn after the children so the fades sit ON the pills. BlendMode
+            // .DstIn multiplies the alpha of what is already there, fading the
+            // content to transparent rather than painting an opaque wash that
+            // would have to match the card's own gradient to be invisible.
+            .drawWithContent {
+                drawContent()
+                val fadeWidth = MODE_FADE_WIDTH.toPx()
+                if (fadeStart > 0f) {
+                    drawRect(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = fadeStart)
+                            ),
+                            startX = 0f,
+                            endX = fadeWidth
+                        ),
+                        size = androidx.compose.ui.geometry.Size(fadeWidth, size.height),
+                        blendMode = BlendMode.DstIn
+                    )
+                }
+                if (fadeEnd > 0f) {
+                    drawRect(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = fadeEnd),
+                                Color.Transparent
+                            ),
+                            startX = size.width - fadeWidth,
+                            endX = size.width
+                        ),
+                        topLeft = androidx.compose.ui.geometry.Offset(size.width - fadeWidth, 0f),
+                        size = androidx.compose.ui.geometry.Size(fadeWidth, size.height),
+                        blendMode = BlendMode.DstIn
+                    )
+                }
+            }
+            .horizontalScroll(scrollState)
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp)
     ) {
@@ -233,17 +296,26 @@ private fun ModeSelector(
                 modifier = Modifier
                     .background(fill, CircleShape)
                     .clip(CircleShape)
-                    // No ripple: a grey Material splash on a gold capsule is the
-                    // most obviously un-iOS thing a tap can do here.
-                    .clickable(
+                    .selectable(
+                        selected = selected,
                         interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onModeSelected(candidate) }
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                        // No ripple: a grey Material splash on a gold capsule is
+                        // the most obviously un-iOS thing a tap can do here.
+                        indication = null,
+                        role = Role.Tab,
+                        onClick = { onModeSelected(candidate) }
+                    )
+                    // 12dp, from 14dp: five pills' worth of saved width is most
+                    // of a sixth label, so materially more of the rail is
+                    // readable without shrinking the type.
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             )
         }
     }
 }
+
+/** How far the scroll-affordance fade reaches in from each live edge. */
+private val MODE_FADE_WIDTH = 20.dp
 
 /** Daily: the current period's total plus a category ring and legend. */
 @Composable

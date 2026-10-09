@@ -6,11 +6,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,6 +20,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import com.maghizhan.tabby.ui.common.TabbyTab
+import com.maghizhan.tabby.ui.common.TabbyTabToggle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -194,36 +197,44 @@ private fun AuthenticatedHost(
     Scaffold(
         containerColor = Color.Transparent,
         bottomBar = {
-            NavigationBar(containerColor = colors.surface.copy(alpha = 0.94f)) {
-                listOf(
-                    Triple(Routes.HOME, "Home", Icons.Filled.Home),
-                    Triple(Routes.FRIENDS, "Friends", Icons.Filled.Group)
-                ).forEach { (route, label, icon) ->
-                    val selected = currentRoute?.hierarchy?.any { it.route == route } == true
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            navController.navigate(route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(imageVector = icon, contentDescription = label) },
-                        label = { Text(label) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = colors.paper,
-                            selectedTextColor = colors.accentBright,
-                            indicatorColor = colors.accent,
-                            unselectedIconColor = colors.subtleInk,
-                            unselectedTextColor = colors.subtleInk
-                        )
-                    )
+            // One connected toggle instead of two NavigationBarItems. See
+            // TabbyTabToggle for why: Material's per-item indicators read as two
+            // separate buttons, where iOS moves ONE marker between two states.
+            val destinations = listOf(Routes.HOME, Routes.FRIENDS)
+            // Default to Home rather than -1 while the back stack settles: a
+            // missing selection would park the pill off-tab for a frame on
+            // every cold start.
+            val selectedIndex = destinations
+                .indexOfFirst { route -> currentRoute?.hierarchy?.any { it.route == route } == true }
+                .coerceAtLeast(0)
+
+            fun navigateTo(route: String) {
+                navController.navigate(route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
                 }
             }
-        }
+
+            TabbyTabToggle(
+                tabs = listOf(
+                    TabbyTab("Home", Icons.Filled.Home) { navigateTo(Routes.HOME) },
+                    TabbyTab("Friends", Icons.Filled.Group) { navigateTo(Routes.FRIENDS) }
+                ),
+                selectedIndex = selectedIndex,
+                // Inset from the screen edges so the capsule floats clear of
+                // them; the bar is a control on the backdrop, not a docked edge.
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 28.dp, vertical = 10.dp)
+            )
+        },
+        // Only the BOTTOM inset is dropped, not all four. The toggle is
+        // translucent and floats over the backdrop, so Scaffold must not
+        // reserve an opaque bar area beneath it — but zeroing every side put
+        // the screen titles under the status bar. Keep the top inset.
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets
+            .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
     ) { padding ->
         NavHost(
             navController = navController,
