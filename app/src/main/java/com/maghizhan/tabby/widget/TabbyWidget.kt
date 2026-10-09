@@ -135,13 +135,19 @@ class TabbyWidget : GlanceAppWidget() {
         val showBreakdown = config.showBreakdown && !isCompactShape
         val showRing = config.showRing
 
-        // The ring grows with the cell. A fixed 58dp ring looked deliberate in a
-        // 2-row widget and lost in a 4-row one; the launcher lets the user
-        // resize, so the art has to answer that.
+        // The ring grows with the cell, but is sized against the space ACTUALLY
+        // left for it — not the whole cell. The widget's own chrome (padding top
+        // and bottom, the mode header, the "+ Add spend" footer) consumes a
+        // fixed slice of the height, and sizing a square ring off the full
+        // height made it taller than the room it had: it overflowed, RemoteViews
+        // clipped it, and the clipped result read as off-centre rather than too
+        // big. Width loses only the horizontal padding.
+        val availableHeight = (size.height.value - COMPACT_CHROME_HEIGHT).coerceAtLeast(0f)
+        val availableWidth = (size.width.value - HORIZONTAL_CHROME).coerceAtLeast(0f)
         val ringSize = when {
-            isCompactShape -> minOf(size.width.value, size.height.value)
-                .let { shortest -> (shortest * COMPACT_RING_FRACTION).dp }
-                .coerceIn(52.dp, 124.dp)
+            isCompactShape -> (minOf(availableWidth, availableHeight) * COMPACT_RING_FRACTION)
+                .dp
+                .coerceIn(48.dp, 124.dp)
             !isWide -> 44.dp
             size.height >= TALL_HEIGHT -> 86.dp
             else -> 58.dp
@@ -189,7 +195,16 @@ class TabbyWidget : GlanceAppWidget() {
                 // void beneath it — the widget looked broken rather than roomy.
                 Box(
                     modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
-                    contentAlignment = Alignment.CenterStart
+                    // Centred outright in the compact shape. The ring is the
+                    // only thing in the body there, and CenterStart left it
+                    // hugging the leading edge with all the slack on one side.
+                    // The wide layout keeps CenterStart so the ring still lines
+                    // up with the header above its legend.
+                    contentAlignment = if (isCompactShape) {
+                        Alignment.Center
+                    } else {
+                        Alignment.CenterStart
+                    }
                 ) {
                 when {
                     snapshot == null -> SignedOutBody()
@@ -464,8 +479,24 @@ class TabbyWidget : GlanceAppWidget() {
          */
         const val COMPACT_ASPECT_CEILING = 1.25f
 
-        /** How much of a compact cell's shortest side the ring occupies. */
-        const val COMPACT_RING_FRACTION = 0.62f
+        /**
+         * How much of the compact body's shortest side the ring occupies.
+         *
+         * Applied to the space left AFTER chrome, not the raw cell, so it sits
+         * near 1.0: the small remainder is breathing room, not a guess at how
+         * much the header and footer will take.
+         */
+        const val COMPACT_RING_FRACTION = 0.94f
+
+        /**
+         * Height consumed by the widget's own chrome in the compact layout:
+         * 14dp padding top and bottom, the ~16dp mode header, and the
+         * "+ Add spend" footer with its 6dp top padding.
+         */
+        const val COMPACT_CHROME_HEIGHT = 62f
+
+        /** Horizontal padding, both sides. */
+        const val HORIZONTAL_CHROME = 28f
 
         /** Past this the launcher has given us a tall cell worth a larger ring. */
         val TALL_HEIGHT = 180.dp

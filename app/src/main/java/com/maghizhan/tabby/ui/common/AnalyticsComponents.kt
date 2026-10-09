@@ -75,7 +75,7 @@ private val CARD_SHADOW = Color(0xFF000000)
  * The size the analytics amount is rendered at, for a given rendered length.
  *
  * Compose (on this BOM) has no `autoSize` text and no equivalent of the iOS
- * `minimumScaleFactor(0.5)`, so a long amount — "₹12,34,567.89" is thirteen
+ * `minimumScaleFactor(0.5)`, so a long amount — "12,34,567.89" is twelve
  * glyphs — either wraps or is clipped at a fixed size. The step-down reproduces
  * iOS's behaviour: the headline renders at the full 40sp until it stops fitting
  * and then shrinks, never below half, which is iOS's floor.
@@ -195,7 +195,7 @@ fun LegendRow(
             Text(
                 // Full currency, as on iOS — the breakdown legend is the place
                 // the user reads exact per-category spend; `compact` turned
-                // ₹12,340 into "₹12.3K" and lost the rupees.
+                // 12,340 into "12.3K" and lost the exact figure.
                 text = CurrencyFormat.full(amount),
                 color = colors.subtleInk,
                 fontSize = 12.sp,

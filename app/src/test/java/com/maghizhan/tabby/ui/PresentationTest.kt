@@ -52,21 +52,21 @@ class PresentationTest {
 
     @Test
     fun `compact leaves amounts under ten thousand unabbreviated`() {
-        assertEquals("₹9,999", CurrencyFormat.compact(BigDecimal("9999")))
+        assertEquals("9,999", CurrencyFormat.compact(BigDecimal("9999"), Locale.US))
     }
 
     @Test
     fun `compact abbreviates thousands and drops a trailing zero decimal`() {
-        assertEquals("₹12K", CurrencyFormat.compact(BigDecimal("12000")))
-        assertEquals("₹12.5K", CurrencyFormat.compact(BigDecimal("12500")))
+        assertEquals("12K", CurrencyFormat.compact(BigDecimal("12000"), Locale.US))
+        assertEquals("12.5K", CurrencyFormat.compact(BigDecimal("12500"), Locale.US))
     }
 
     @Test
     fun `compact abbreviates millions and caps at the iOS ceiling`() {
-        assertEquals("₹1M", CurrencyFormat.compact(BigDecimal("1000000")))
+        assertEquals("1M", CurrencyFormat.compact(BigDecimal("1000000"), Locale.US))
         // The ceiling matches WidgetCurrencyFormatter.swift exactly; a
         // different one would make the two platforms' widgets disagree.
-        assertEquals("₹999.9M+", CurrencyFormat.compact(BigDecimal("999999999999")))
+        assertEquals("999.9M+", CurrencyFormat.compact(BigDecimal("999999999999"), Locale.US))
     }
 
     @Test
@@ -85,13 +85,36 @@ class PresentationTest {
     }
 
     @Test
-    fun `signed stays in rupees regardless of device locale`() {
-        // iOS puts every Friends amount through WidgetCurrencyFormatter, so the
-        // net must not switch to the device's own currency: a "+$300" net beside
-        // "₹500" and "₹200" columns is three currencies in one row.
-        assertTrue(CurrencyFormat.signed(BigDecimal("300"), Locale.US).startsWith("+₹"))
-        assertTrue(CurrencyFormat.signed(BigDecimal("-300"), Locale.US).startsWith("-₹"))
-        assertTrue(CurrencyFormat.signed(BigDecimal.ZERO, Locale.US).startsWith("₹"))
+    fun `no amount carries a currency symbol in any locale`() {
+        // The defect this replaces: full() took the symbol from the DEVICE
+        // locale while compact() hard-coded a rupee, so Home read "$1,240" and
+        // Friends "₹1,240" for the same number. An expense stores no currency
+        // code, so any symbol printed here is a claim the data cannot support.
+        //
+        // Asserted across locales and across every helper, so no screen can
+        // reintroduce the mismatch by reaching for the other one.
+        val symbols = listOf("₹", "$", "€", "£", "¥", "Rs")
+        val locales = listOf(Locale.US, Locale.UK, Locale.forLanguageTag("en-IN"), Locale.GERMANY)
+        val amounts = listOf("0", "50", "9999", "12500", "1000000", "-300")
+
+        for (locale in locales) {
+            for (raw in amounts) {
+                val amount = BigDecimal(raw)
+                val rendered = listOf(
+                    CurrencyFormat.full(amount, locale),
+                    CurrencyFormat.compact(amount, locale),
+                    CurrencyFormat.signed(amount, locale)
+                )
+                for (text in rendered) {
+                    for (symbol in symbols) {
+                        assertTrue(
+                            "\"$text\" ($locale, $raw) must not contain $symbol",
+                            !text.contains(symbol)
+                        )
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Category accents
@@ -139,19 +162,19 @@ class PresentationTest {
 
     @Test
     fun `a short amount renders at the full iOS headline size`() {
-        // "₹66.91" is well within the comfortable width, so it must NOT shrink.
+        // "66.91" is well within the comfortable width, so it must NOT shrink.
         assertEquals(
             AmountTypography.BASE_SP,
-            AmountTypography.fontSizeSp("₹66.91".length),
+            AmountTypography.fontSizeSp("66.91".length),
             0.001f
         )
     }
 
     @Test
     fun `a long amount shrinks rather than clipping the user's money`() {
-        val long = "₹12,34,567.89"
+        val long = "12,34,567.89"
         val size = AmountTypography.fontSizeSp(long.length)
-        assertTrue("a 13-glyph amount must step down from 40sp", size < AmountTypography.BASE_SP)
+        assertTrue("a 12-glyph amount must step down from 40sp", size < AmountTypography.BASE_SP)
         assertTrue("and must stay legible", size >= AmountTypography.MINIMUM_SP)
     }
 

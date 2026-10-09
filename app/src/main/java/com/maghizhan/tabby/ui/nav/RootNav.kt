@@ -209,6 +209,31 @@ private fun AuthenticatedHost(
                 .coerceAtLeast(0)
 
             fun navigateTo(route: String) {
+                // Is this tab's root already somewhere beneath us? Checked
+                // against the real back stack, NOT the destination hierarchy:
+                // Profile is a SIBLING of Home in the same graph, not a child
+                // of it, so a hierarchy check never matched and every tap fell
+                // through to navigate().
+                val inBackStack = navController.currentBackStack.value
+                    .any { it.destination.route == route }
+                val isCurrent = currentRoute?.route == route
+
+                if (inBackStack && !isCurrent) {
+                    // Pop back to it rather than navigating.
+                    //
+                    // navigate() cannot do this job here: popUpTo(saveState =
+                    // true) SAVES the entries it pops, keyed by the destination
+                    // popped up to, and restoreState = true then restores them.
+                    // Tapping Home from Profile therefore saved [profile] under
+                    // "home" and restored it in the same call, landing straight
+                    // back on Profile — the button looked dead while actually
+                    // completing a perfect round trip. Friends was unaffected
+                    // only because it had no saved stack to restore.
+                    navController.popBackStack(route, inclusive = false)
+                    return
+                }
+                if (isCurrent) return
+
                 navController.navigate(route) {
                     popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                     launchSingleTop = true

@@ -3,6 +3,7 @@ package com.maghizhan.tabby.ui.entry
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +14,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -26,6 +33,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -91,9 +99,34 @@ fun EntrySheet(
         sheetState = sheetState,
         containerColor = colors.paper
     ) {
+        // Resolved INSIDE the sheet, not in the enclosing composable.
+        //
+        // ModalBottomSheet hosts its content in its own window with its own
+        // focus owner, so a FocusManager captured outside it drives a different
+        // focus tree entirely: clearFocus() succeeded against the host screen
+        // while the sheet's field stayed focused and the IME stayed up. Same
+        // for the keyboard controller, which is bound to the window it was
+        // read from.
+        val focusManager: FocusManager = LocalFocusManager.current
+        val keyboard = LocalSoftwareKeyboardController.current
+        // Both, not either: hide() alone leaves the field focused so the next
+        // tap reopens the IME, and clearFocus() alone does not always retract
+        // an already-shown keyboard.
+        val dismissKeyboard = {
+            keyboard?.hide()
+            focusManager.clearFocus(force = true)
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // Tapping the sheet's own background dismisses the keyboard as
+                // well. The Done key is the explicit exit, but tapping away
+                // from a field is what people actually reach for first, and on
+                // a sheet there is no scrim above the keyboard to absorb it.
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { dismissKeyboard() })
+                }
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -140,12 +173,25 @@ fun EntrySheet(
                         Text("0", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    // Decimal keyboards carry no confirm key of their own, so
+                    // this one needs Done declared explicitly too.
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { dismissKeyboard() }),
                     textStyle = androidx.compose.ui.text.TextStyle(
                         color = colors.ink,
                         fontSize = 44.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = colors.ink,
+                        unfocusedTextColor = colors.ink,
+                        cursorColor = colors.accentBright,
+                        focusedBorderColor = colors.accent,
+                        unfocusedBorderColor = colors.hairline
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -185,6 +231,29 @@ fun EntrySheet(
                     placeholder = { Text("Note (optional)", color = colors.subtleInk) },
                     isError = !state.isNoteValid,
                     maxLines = 2,
+                    // The note is the only free-text field here, and it had no
+                    // way out: a multi-line field shows Enter rather than a
+                    // confirm key, so the keyboard covered "Lock it in" with no
+                    // obvious dismissal. ImeAction.Done turns the Enter key into
+                    // the exit, and clearing focus (not just hiding the IME)
+                    // means it does not immediately reopen.
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { dismissKeyboard() }),
+                    // Explicit colours: the field inherited an unreadable
+                    // default on the dark sheet, so typed text was invisible
+                    // against the paper background — the note looked like it
+                    // had not registered at all.
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = colors.ink,
+                        fontSize = 15.sp
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = colors.ink,
+                        unfocusedTextColor = colors.ink,
+                        cursorColor = colors.accentBright,
+                        focusedBorderColor = colors.accent,
+                        unfocusedBorderColor = colors.hairline
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(

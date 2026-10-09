@@ -6,14 +6,31 @@ import java.text.NumberFormat
 import java.util.Locale
 
 /**
- * Currency strings for the app and the widget — the Android port of
+ * Amount strings for the app and the widget — the Android port of
  * `WidgetCurrencyFormatter.swift`.
  *
- * Two formats, matching iOS exactly:
+ * ## No currency symbol, anywhere
  *
- * - [full] is the locale's own currency format, used wherever there is room
- *   (amount headlines, row amounts).
- * - [compact] abbreviates above ₹10,000 into K/M so a widget ring label cannot
+ * Every amount is rendered as a bare number. Previously [full] asked
+ * `NumberFormat.getCurrencyInstance` for the DEVICE LOCALE's symbol while
+ * [compact] hard-coded a rupee sign, so the same balance read as "$1,240" on
+ * Home and "₹1,240" on Friends — two currencies for one number, decided by
+ * which helper a screen happened to call.
+ *
+ * Dropping the symbol rather than forcing one is the honest fix: an expense row
+ * stores an amount and no currency code, so any symbol this layer prints is a
+ * claim the data cannot support, and a wrong symbol is worse than none. It also
+ * removes the whole class of defect — no future screen can reintroduce a
+ * mismatch by picking the other helper.
+ *
+ * Grouping still follows the device locale, so thousands separators look native
+ * without implying a currency.
+ *
+ * Two formats, matching iOS:
+ *
+ * - [full] is the plain grouped number, used wherever there is room (amount
+ *   headlines, row amounts).
+ * - [compact] abbreviates above 10,000 into K/M so a widget ring label cannot
  *   overflow its circle. The thresholds, the 999.9M+ ceiling and the
  *   one-decimal rounding are the iOS values; a different ceiling here would
  *   make the two platforms' widgets disagree on the same data.
@@ -23,50 +40,34 @@ import java.util.Locale
  */
 object CurrencyFormat {
 
-    private const val RUPEE = "₹"
     private val MILLION_THRESHOLD = BigDecimal("999950")
     private val COMPACT_THRESHOLD = BigDecimal("10000")
     private val MAXIMUM_DISPLAYED_MILLIONS = BigDecimal("999.9")
     private val THOUSAND = BigDecimal("1000")
     private val MILLION = BigDecimal("1000000")
 
-    fun full(amount: BigDecimal, locale: Locale = Locale.getDefault()): String {
-        val formatter = NumberFormat.getCurrencyInstance(locale).apply {
-            minimumFractionDigits = 0
-            maximumFractionDigits = 2
-        }
-        return formatter.format(amount)
-    }
+    fun full(amount: BigDecimal, locale: Locale = Locale.getDefault()): String =
+        grouped(amount, locale)
 
     fun compact(amount: BigDecimal, locale: Locale = Locale.getDefault()): String {
         val sign = if (amount.signum() < 0) "-" else ""
         val magnitude = amount.abs()
 
         if (magnitude < COMPACT_THRESHOLD) {
-            val formatter = NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
-                minimumFractionDigits = 0
-                maximumFractionDigits = 2
-                isGroupingUsed = true
-            }
-            return "$sign$RUPEE${formatter.format(magnitude)}"
+            return "$sign${grouped(magnitude, locale)}"
         }
 
         if (magnitude < MILLION_THRESHOLD) {
-            return "$sign$RUPEE${abbreviated(magnitude.divide(THOUSAND, 4, RoundingMode.HALF_UP))}K"
+            return "$sign${abbreviated(magnitude.divide(THOUSAND, 4, RoundingMode.HALF_UP))}K"
         }
 
         val millions = magnitude.divide(MILLION, 4, RoundingMode.HALF_UP)
-        if (millions > MAXIMUM_DISPLAYED_MILLIONS) return "$sign${RUPEE}999.9M+"
-        return "$sign$RUPEE${abbreviated(millions)}M"
+        if (millions > MAXIMUM_DISPLAYED_MILLIONS) return "${sign}999.9M+"
+        return "$sign${abbreviated(millions)}M"
     }
 
     /**
      * A net balance with an explicit sign.
-     *
-     * Built on [compact], not [full]: iOS routes every Friends amount through
-     * `WidgetCurrencyFormatter`, so the whole screen is rupees. Formatting the
-     * net with the device locale instead put a "+$300" net next to "₹500" and
-     * "₹200" columns in the same row — three currencies for one balance.
      *
      * A leading "+" is added for a positive net because the two directions mean
      * opposite things on the Friends screen ("owed to you" versus "you owe"),
@@ -76,6 +77,21 @@ object CurrencyFormat {
         amount.signum() > 0 -> "+${compact(amount, locale)}"
         amount.signum() < 0 -> "-${compact(amount.abs(), locale)}"
         else -> compact(BigDecimal.ZERO, locale)
+    }
+
+    /**
+     * The locale's grouped decimal format, with no currency symbol.
+     *
+     * Grouping is taken from the passed locale rather than pinned to one
+     * region, so separators match the rest of the device's number formatting.
+     */
+    private fun grouped(amount: BigDecimal, locale: Locale): String {
+        val formatter = NumberFormat.getNumberInstance(locale).apply {
+            minimumFractionDigits = 0
+            maximumFractionDigits = 2
+            isGroupingUsed = true
+        }
+        return formatter.format(amount)
     }
 
     /** One decimal, with a trailing `.0` dropped — "12K", not "12.0K". */
