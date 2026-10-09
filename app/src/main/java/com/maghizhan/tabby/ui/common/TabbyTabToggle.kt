@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -125,7 +126,12 @@ fun TabbyTabToggle(
                 )
         )
 
-        Row(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+        // selectableGroup(): marks the row as ONE selection collection rather
+        // than two unrelated selectables. Without it TalkBack announces the
+        // halves as isolated controls and loses the "1 of 2" collection
+        // context, and directional traversal is not guaranteed to treat them
+        // as a group — the per-item Role.Tab semantics alone do not supply it.
+        Row(modifier = Modifier.fillMaxWidth().fillMaxHeight().selectableGroup()) {
             tabs.forEachIndexed { index, tab ->
                 val selected = index == selectedIndex
                 // Contents cross-fade on the same beat as the pill's travel, so

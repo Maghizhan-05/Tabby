@@ -1,6 +1,7 @@
 package com.maghizhan.tabby.ui.common
 
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -108,7 +109,13 @@ fun AutoShrinkText(
             // its space and `maxLines = 1` then hides the remainder — exactly
             // the defect this composable prevents.
             softWrap = false,
-            style = style
+            style = style,
+            // Fills the constrained width so textAlign has a box to align
+            // WITHIN. Left intrinsic, the Text was only as wide as its glyphs
+            // and sat at the box's start, so `textAlign = End` silently did
+            // nothing: the Friends "NET" header sat at the start of its column
+            // while the net values beneath it were right-aligned.
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }

@@ -33,6 +33,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -223,6 +224,25 @@ private fun ModeSelector(
         animationSpec = tween(durationMillis = 160),
         label = "modeFadeEnd"
     )
+
+    // Keep the SELECTED pill on screen.
+    //
+    // The rail scrolls, so the active mode can sit outside the viewport — on a
+    // 320dp screen the later modes start off-screen, and after a process death
+    // or a return to Home the user saw a rail whose visible pills were all
+    // unselected, with nothing indicating which mode the figures below actually
+    // belong to. The fade says "there is more"; it cannot say "and your
+    // selection is in it".
+    val selectedIndex = AnalyticsMode.entries.indexOf(mode).coerceAtLeast(0)
+    LaunchedEffect(mode, scrollState.maxValue) {
+        if (scrollState.maxValue <= 0) return@LaunchedEffect
+        // Proportional rather than measured: every pill carries the same
+        // padding and the labels are within a few glyphs of each other, so
+        // fraction-of-rail lands the selection comfortably inside the viewport
+        // without plumbing per-item coordinates through for a six-item row.
+        val fraction = selectedIndex.toFloat() / (AnalyticsMode.entries.size - 1).coerceAtLeast(1)
+        scrollState.animateScrollTo((scrollState.maxValue * fraction).toInt())
+    }
 
     Row(
         modifier = Modifier

@@ -304,10 +304,16 @@ fun Modifier.yieldToSwipeActions(controller: SwipeRevealController): Modifier {
     return this
         .offset(y = shift)
         .alpha(alpha)
-        // Fully faded is not merely invisible: a 0-alpha button still takes
-        // taps, so without this the FAB would swallow presses aimed at the
-        // Delete panel underneath it — the original defect, now silent.
-        .then(if (alpha == 0f) Modifier.noTouch() else Modifier)
+        // Keyed on the IMMEDIATE state, not on the animation reaching 0f.
+        //
+        // A 0-alpha button still takes taps, so the FAB must stop hit-testing
+        // or it swallows presses aimed at the Delete panel underneath — the
+        // original defect, made silent. Waiting for `alpha == 0f` left it
+        // clickable for the whole 180ms exit while it visibly moved across the
+        // revealed actions, so a quick tap right after the swipe still hit a
+        // button the user could already see was leaving. Availability is a
+        // question about intent, not about a float reaching its endpoint.
+        .then(if (hidden) Modifier.noTouch() else Modifier)
 }
 
 /** Swallows nothing and receives nothing; used to disable a faded overlay. */

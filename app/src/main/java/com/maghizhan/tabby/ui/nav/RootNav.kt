@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
@@ -249,8 +250,18 @@ private fun AuthenticatedHost(
                 selectedIndex = selectedIndex,
                 // Inset from the screen edges so the capsule floats clear of
                 // them; the bar is a control on the backdrop, not a docked edge.
+                //
+                // navigationBarsPadding FIRST, then the visual padding. The
+                // Scaffold drops the bottom content inset so the translucent
+                // capsule can float over the backdrop, but that left the toggle
+                // sitting in the system gesture zone — Android's gesture
+                // indicator drew across its lower edge and the bottom of its
+                // touch target competed with the back/home swipe. Consuming the
+                // inset here restores the clearance without re-reserving an
+                // opaque bar area in the Scaffold.
                 modifier = Modifier
                     .fillMaxWidth()
+                    .navigationBarsPadding()
                     .padding(horizontal = 28.dp, vertical = 10.dp)
             )
         },
