@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.maghizhan.tabby.data.local.entity.ExpenseEntity
 import com.maghizhan.tabby.ui.common.TabbyCard
 import com.maghizhan.tabby.ui.common.rememberSwipeRevealController
+import com.maghizhan.tabby.ui.common.yieldToSwipeActions
 import com.maghizhan.tabby.ui.theme.Tabby
 import com.maghizhan.tabby.ui.theme.TabbyOrbit
 
@@ -66,6 +67,10 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val colors = Tabby.colors
+
+    // Hoisted above the Column so the FAB, which is a sibling of the list
+    // rather than a child of it, can read whether a row is open.
+    val swipeController = rememberSwipeRevealController()
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -123,7 +128,6 @@ fun HomeScreen(
                 LocalConfiguration.current.screenHeightDp.dp * IOS_ANALYTICS_HEIGHT_FRACTION
 
             val listState = rememberLazyListState()
-            val swipeController = rememberSwipeRevealController()
 
             // Scrolling dismisses an open row's actions. Leaving it open while
             // the list moves under the thumb puts a Delete button wherever the
@@ -215,6 +219,8 @@ fun HomeScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 22.dp, bottom = 22.dp)
+                // Clears the row actions while a row is open; see the modifier.
+                .yieldToSwipeActions(swipeController)
                 // The iOS `.shadow(color: accentGlow, radius: 16, y: 6)`.
                 // Tinted shadows are an API 28+ feature and degrade to the
                 // platform default below it, which is why the glow is expressed

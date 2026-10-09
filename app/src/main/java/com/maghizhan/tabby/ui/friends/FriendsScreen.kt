@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import com.maghizhan.tabby.ui.common.SwipeAction
 import com.maghizhan.tabby.ui.common.SwipeActionsRow
 import com.maghizhan.tabby.ui.common.rememberSwipeRevealController
+import com.maghizhan.tabby.ui.common.yieldToSwipeActions
 import com.maghizhan.tabby.ui.format.CurrencyFormat
 import com.maghizhan.tabby.ui.theme.Tabby
 import com.maghizhan.tabby.ui.theme.TabbyOrbit
@@ -277,6 +278,9 @@ fun FriendsScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 22.dp, bottom = 22.dp)
+                // Same collision as Home's: the delete panel is revealed right
+                // where this button floats.
+                .yieldToSwipeActions(swipeController)
                 .shadow(
                     elevation = 16.dp,
                     shape = CircleShape,

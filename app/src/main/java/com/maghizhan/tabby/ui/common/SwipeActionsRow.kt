@@ -1,7 +1,9 @@
 package com.maghizhan.tabby.ui.common
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -31,11 +33,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -67,6 +73,17 @@ data class SwipeAction(
 class SwipeRevealController {
     var openRow: Any? by mutableStateOf(null)
         private set
+
+    /**
+     * True while any row is revealed.
+     *
+     * Read by the screen so an overlay (the Add-spend FAB) can get out of the
+     * way: the actions sit at the row's trailing edge, which is exactly where a
+     * bottom-end FAB floats, so a revealed Edit/Delete was being covered by it
+     * on every row except the last — the only one `contentPadding` protects.
+     */
+    val isAnyRowOpen: Boolean
+        get() = openRow != null
 
     fun open(row: Any) {
         openRow = row
@@ -127,6 +144,7 @@ fun SwipeActionsRow(
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current
+    val haptics = LocalHapticFeedback.current
     val rowKey = remember { Any() }
     val maxOffsetPx = with(density) { (ACTION_WIDTH * actions.size).toPx() }
 
@@ -180,6 +198,11 @@ fun SwipeActionsRow(
                     action = action,
                     revealFraction = revealFraction,
                     onInvoke = {
+                        // A firmer confirm tick than the threshold crossing:
+                        // invoking an action is a committed act (one of them
+                        // deletes a financial record), so it must not feel the
+                        // same as sliding past a latch.
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         close()
                         controller?.close(rowKey)
                         action.onClick()
@@ -204,10 +227,22 @@ fun SwipeActionsRow(
                 .draggable(
                     orientation = Orientation.Horizontal,
                     state = rememberDraggableState { delta ->
+                        val next = (offsetPx + delta).coerceIn(-maxOffsetPx, 0f)
+                        // One tick as the drag crosses the commit threshold, in
+                        // either direction. This is the whole of what makes the
+                        // gesture feel decided rather than loose: the user is
+                        // told where the latch is WHILE dragging, instead of
+                        // discovering on release whether it took. Fired on the
+                        // crossing only, never per-frame.
+                        val wasPast = abs(offsetPx) > maxOffsetPx * OPEN_THRESHOLD
+                        val isPast = abs(next) > maxOffsetPx * OPEN_THRESHOLD
+                        if (wasPast != isPast) {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
                         // Clamped to the reveal: the row cannot be dragged
                         // right past its resting place, nor left past the
                         // actions into empty space.
-                        offsetPx = (offsetPx + delta).coerceIn(-maxOffsetPx, 0f)
+                        offsetPx = next
                     },
                     onDragStarted = { controller?.open(rowKey) },
                     onDragStopped = {
@@ -235,6 +270,50 @@ fun SwipeActionsRow(
                 )
         ) { content() }
     }
+}
+
+/**
+ * Hides an overlay while a swipe row's actions are revealed.
+ *
+ * The actions appear at the row's TRAILING edge — exactly where a bottom-end
+ * FAB floats — so a revealed Edit/Delete sits under the button on every row
+ * except the last, which is the only one a list's `contentPadding` clears.
+ *
+ * Yielding rather than relocating: moving the FAB elsewhere trades this
+ * collision for a worse permanent position, and insetting the whole list leaves
+ * a dead gutter on every frame to solve a problem that exists only during a
+ * gesture. The gesture that reveals the actions is the one that hides the
+ * button, and it returns the instant the row closes, so the cost is zero taps.
+ *
+ * Applied via [Modifier] rather than copied into each screen: Home and Friends
+ * both carry this FAB, and a fix that lives in one of them is a fix that drifts.
+ */
+@Composable
+fun Modifier.yieldToSwipeActions(controller: SwipeRevealController): Modifier {
+    val hidden = controller.isAnyRowOpen
+    val alpha by animateFloatAsState(
+        targetValue = if (hidden) 0f else 1f,
+        animationSpec = tween(durationMillis = 180),
+        label = "overlayYieldAlpha"
+    )
+    val shift by animateDpAsState(
+        targetValue = if (hidden) 28.dp else 0.dp,
+        animationSpec = tween(durationMillis = 180),
+        label = "overlayYieldShift"
+    )
+    return this
+        .offset(y = shift)
+        .alpha(alpha)
+        // Fully faded is not merely invisible: a 0-alpha button still takes
+        // taps, so without this the FAB would swallow presses aimed at the
+        // Delete panel underneath it — the original defect, now silent.
+        .then(if (alpha == 0f) Modifier.noTouch() else Modifier)
+}
+
+/** Swallows nothing and receives nothing; used to disable a faded overlay. */
+private fun Modifier.noTouch(): Modifier = this.layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    layout(placeable.width, placeable.height) { }
 }
 
 /** A single revealed action; it scales in as the row slides away from it. */
