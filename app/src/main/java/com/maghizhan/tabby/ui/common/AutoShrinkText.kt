@@ -1,19 +1,19 @@
 package com.maghizhan.tabby.ui.common
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
-import androidx.compose.material3.Text
 
 /**
  * A single-line label that shrinks itself until it fits, instead of losing
@@ -32,10 +32,21 @@ import androidx.compose.material3.Text
  * floor stops it becoming unreadable — if a label cannot fit even there, the
  * layout is wrong and should be fixed at the layout.
  *
- * Mechanics: draw is suppressed until a measurement fits, so the user never
- * sees the intermediate sizes flash. State is keyed on [text] and [fontSize] so
- * a recomposition with new content re-measures from the top rather than
- * inheriting the previous label's shrink.
+ * ## Why the fit is measured rather than remembered
+ *
+ * The obvious implementation — shrink inside `onTextLayout` when overflow is
+ * reported, hold the result in state — only ever travels DOWN. Nothing restores
+ * the size once the constraint that forced the shrink is gone: rotating into a
+ * wider column, lowering the system font scale, or resizing a freeform window
+ * all leave the label permanently small, and that staleness is invisible
+ * because small-but-complete text looks deliberate.
+ *
+ * So the size is DERIVED, not stored. [rememberTextMeasurer] measures candidate
+ * sizes against the real constraints during composition and the largest that
+ * fits is drawn. Any input change — available width, font scale, style, weight,
+ * the string itself — re-derives from the top and can travel back UP as readily
+ * as down. A derived size also means no intermediate size is ever committed to
+ * the tree, so there is no flash needing suppression.
  */
 @Composable
 fun AutoShrinkText(
@@ -47,34 +58,57 @@ fun AutoShrinkText(
     fontWeight: FontWeight? = null,
     letterSpacing: TextUnit = TextUnit.Unspecified,
     textAlign: TextAlign? = null,
-    style: TextStyle = TextStyle.Default
+    // LocalTextStyle, NOT TextStyle.Default: `Text` merges this over the
+    // inherited style, so passing Default would discard the theme's Inter
+    // family and render these labels in the platform font — the very
+    // regression this component exists to repair.
+    style: TextStyle = LocalTextStyle.current
 ) {
-    var resolvedSize by remember(text, fontSize) { mutableStateOf(fontSize) }
-    var measured by remember(text, fontSize) { mutableStateOf(false) }
+    val measurer = rememberTextMeasurer()
 
-    Text(
-        text = text,
-        color = color,
-        fontSize = resolvedSize,
-        fontWeight = fontWeight,
-        letterSpacing = letterSpacing,
-        textAlign = textAlign,
-        maxLines = 1,
-        // Must be false: with wrapping on, an over-wide label breaks at its
-        // space and `maxLines = 1` then hides the rest — the exact failure this
-        // composable exists to prevent. Off, the overflow is reported instead.
-        softWrap = false,
-        style = style,
-        onTextLayout = { result ->
-            if (result.didOverflowWidth && resolvedSize > minFontSize) {
-                // Half-point steps: whole points visibly mismatch neighbouring
-                // columns' labels, and the loop runs at most a handful of times
-                // over a 20% range.
-                resolvedSize = (resolvedSize.value - 0.5f).sp
-            } else {
-                measured = true
-            }
-        },
-        modifier = modifier.drawWithContent { if (measured) drawContent() }
-    )
+    BoxWithConstraints(modifier = modifier) {
+        val available = constraints.maxWidth
+
+        // Measured with INFINITE width so the result is the label's natural
+        // width. Measuring against the real constraint would let the engine
+        // clamp the line and report no overflow, which is the failure mode this
+        // replaces rather than a usable signal.
+        fun naturalWidthAt(sizeSp: Float): Int = measurer.measure(
+            text = AnnotatedString(text),
+            style = style.merge(
+                TextStyle(
+                    fontSize = sizeSp.sp,
+                    fontWeight = fontWeight,
+                    letterSpacing = letterSpacing
+                )
+            ),
+            maxLines = 1,
+            softWrap = false,
+            constraints = Constraints()
+        ).size.width
+
+        val floor = minFontSize.value
+        var candidate = fontSize.value
+        // Half-point steps: whole points visibly mismatch the neighbouring
+        // columns' labels, and the span is at most ~20% of the base size, so
+        // this settles in a handful of iterations.
+        while (candidate > floor && naturalWidthAt(candidate) > available) {
+            candidate -= 0.5f
+        }
+
+        Text(
+            text = text,
+            color = color,
+            fontSize = candidate.coerceAtLeast(floor).sp,
+            fontWeight = fontWeight,
+            letterSpacing = letterSpacing,
+            textAlign = textAlign,
+            maxLines = 1,
+            // Must stay false: with wrapping on, an over-wide label breaks at
+            // its space and `maxLines = 1` then hides the remainder — exactly
+            // the defect this composable prevents.
+            softWrap = false,
+            style = style
+        )
+    }
 }

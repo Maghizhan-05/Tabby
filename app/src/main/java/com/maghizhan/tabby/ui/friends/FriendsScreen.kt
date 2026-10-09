@@ -305,9 +305,12 @@ private fun androidx.compose.foundation.layout.RowScope.HeaderCell(
         text = text,
         color = Tabby.colors.subtleInk,
         fontSize = 10.sp,
-        // 8sp floor: still legible for an all-caps tracked label, and enough
-        // range for "THEY OWE" to fit the ~50dp column on a 320dp screen.
-        minFontSize = 8.sp,
+        // 6sp floor rather than 8sp. The floor is in sp, so the system font
+        // scale multiplies it while the column width does not grow: at 1.3x an
+        // 8sp floor still overflowed and, with softWrap off, hard-clipped to
+        // "THEY OW". 6sp holds the full label to ~1.5x, past which the layout
+        // itself is wrong and should be fixed there rather than by shrinking.
+        minFontSize = 6.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = 0.8.sp,
         textAlign = align,

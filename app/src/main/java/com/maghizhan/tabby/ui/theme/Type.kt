@@ -106,12 +106,16 @@ private val TrimmedNumerals = LineHeightStyle(
  * The Material 3 slots, remapped onto Tabby's two families.
  *
  * Display and headline carry Nunito because every screen's hero element is a
- * money amount; everything from title down is Inter. Screens that set an
- * explicit `fontSize` still inherit the family from `bodyLarge` through
- * `LocalTextStyle`, which is why wiring this object is enough to re-face the
- * whole app without touching call sites — but a numeral that must be rounded
- * asks for [NunitoFamily] explicitly, since inheritance alone would give it
- * Inter.
+ * money amount; everything from title down is Inter.
+ *
+ * What wiring this object does and does not do, precisely: `MaterialTheme`
+ * provides `bodyLarge` as the ambient `LocalTextStyle`, so a plain `Text` that
+ * sets only `fontSize`/`fontWeight`/`color` inherits Inter from [bodyLarge] and
+ * needs no edit. It does NOT reach the other slots — nothing applies
+ * [displayLarge] to a `Text` unless that call site asks for it. So the slots
+ * below whose BEHAVIOUR matters (the rounded face and the line-height trim on
+ * hero numerals) are requested explicitly at the sites that need them, via
+ * [moneyStyle] for amounts or `MaterialTheme.typography.x` for structure.
  */
 val TabbyTypography = Typography(
     displayLarge = TextStyle(
@@ -240,5 +244,11 @@ const val TABULAR_FIGURES = "tnum"
 @Composable
 fun moneyStyle(): TextStyle = LocalTextStyle.current.copy(
     fontFamily = NunitoFamily,
-    fontFeatureSettings = TABULAR_FIGURES
+    fontFeatureSettings = TABULAR_FIGURES,
+    // The trim the display/headline slots declare, applied here too: amounts
+    // are set by explicit fontSize at their call sites rather than by taking a
+    // slot wholesale, so without this the hero numerals would keep Compose's
+    // centred leading and sit visibly low in their own box — the mis-centring
+    // against an adjacent ring that the slots were shaped to avoid.
+    lineHeightStyle = TrimmedNumerals
 )

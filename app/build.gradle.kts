@@ -146,4 +146,17 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.room.testing)
+    // Compose UI test, on the JVM via Robolectric: the typography wiring rests
+    // on Material providing bodyLarge as the ambient LocalTextStyle, which no
+    // other test can observe. Version comes from the Compose BOM already
+    // applied above, so this adds no new version to track.
+    // testImplementation on the junit4 rule, but the manifest is
+    // debugImplementation: the rule launches a ComponentActivity that must
+    // exist in the MERGED manifest Robolectric reads, and a test-only
+    // dependency's manifest is never merged. Because that manifest reaches the
+    // debug variant only, the test using it lives in src/testDebug -- shipping
+    // test scaffolding into the release variant to satisfy testReleaseUnitTest
+    // would be the wrong trade.
+    testImplementation(libs.androidx.ui.test.junit4)
+    debugImplementation(libs.androidx.ui.test.manifest)
 }
