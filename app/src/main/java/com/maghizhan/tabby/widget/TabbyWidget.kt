@@ -189,12 +189,22 @@ class TabbyWidget : GlanceAppWidget() {
                     )
                 }
 
-                // The body CENTRES in whatever height the launcher gave the
-                // widget. Top-aligned with a single spacer above the footer, a
-                // tall cell pinned the ring to the top third and left an empty
-                // void beneath it — the widget looked broken rather than roomy.
+                // The body is the Quick Entry target.
+                //
+                // The footer button was spending ~22dp of a square cell's
+                // height to say what a tap can say implicitly, and that height
+                // came straight out of the ring. Putting the action on the body
+                // keeps it while giving the art the room back.
+                //
+                // Applied to the BODY and not the root Column deliberately: the
+                // header above keeps its own mode-cycling action, so the two
+                // gestures stay distinct targets rather than the whole widget
+                // becoming one button with no way to change period.
                 Box(
-                    modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .defaultWeight()
+                        .clickable(actionStartActivity(quickEntry)),
                     // Centred outright in the compact shape. The ring is the
                     // only thing in the body there, and CenterStart left it
                     // hugging the leading edge with all the slack on one side.
@@ -233,19 +243,6 @@ class TabbyWidget : GlanceAppWidget() {
                 }
                 }
 
-                // A SEPARATE action from the header, so cycling the mode and
-                // logging a spend are distinct targets.
-                Text(
-                    text = "+ Add spend",
-                    style = TextStyle(
-                        color = ColorProvider(TabbyPalette.accentBright),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    modifier = GlanceModifier
-                        .padding(top = 6.dp)
-                        .clickable(actionStartActivity(quickEntry))
-                )
             }
         }
     }
@@ -484,16 +481,16 @@ class TabbyWidget : GlanceAppWidget() {
          *
          * Applied to the space left AFTER chrome, not the raw cell, so it sits
          * near 1.0: the small remainder is breathing room, not a guess at how
-         * much the header and footer will take.
+         * much the header will take.
          */
         const val COMPACT_RING_FRACTION = 0.94f
 
         /**
          * Height consumed by the widget's own chrome in the compact layout:
-         * 14dp padding top and bottom, the ~16dp mode header, and the
-         * "+ Add spend" footer with its 6dp top padding.
+         * 14dp padding top and bottom plus the ~16dp mode header. Quick Entry
+         * now lives on the body tap, so no footer height is reserved.
          */
-        const val COMPACT_CHROME_HEIGHT = 62f
+        const val COMPACT_CHROME_HEIGHT = 44f
 
         /** Horizontal padding, both sides. */
         const val HORIZONTAL_CHROME = 28f
@@ -502,7 +499,7 @@ class TabbyWidget : GlanceAppWidget() {
         val TALL_HEIGHT = 180.dp
 
         /**
-         * The Intent behind the widget's "+ Add spend" target.
+         * The Intent behind the widget body's Quick Entry target.
          *
          * Extracted so a test can exercise the SAME intent production uses: the
          * defect it guards against is one rendered widget's action being tapped

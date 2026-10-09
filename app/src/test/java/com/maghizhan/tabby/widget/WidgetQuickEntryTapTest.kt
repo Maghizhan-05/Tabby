@@ -19,7 +19,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Tapping the widget's "+ Add spend" opens Quick Entry EVERY time, not once per
+ * Tapping the widget body opens Quick Entry EVERY time, not once per
  * widget render.
  *
  * The defect: the request id was written into the Intent inside
