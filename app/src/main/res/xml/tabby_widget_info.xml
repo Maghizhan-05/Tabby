@@ -7,12 +7,22 @@
   maxResizeWidth/Height admit the medium presentation (the category breakdown),
   which TabbyWidget selects through SizeMode.Responsive.
 
+  resizeMode is horizontal|vertical and the minimums are a 2x1, so the user can
+  drag the cell to the squarish shape that renders the ring-only layout; the
+  layout follows the resulting ASPECT RATIO, not a declared size (see
+  TabbyWidget.COMPACT_ASPECT_CEILING), because launcher grids report their own
+  cell dimensions and no literal size would match across devices.
+
+  android:configure launches WidgetConfigActivity when the widget is dropped, so
+  period and contents can be chosen per placed instance.
+
   updatePeriodMillis is 0: the system's minimum is 30 minutes, which is both too
   slow to be useful and wasteful. The app drives refreshes instead — see
   WidgetUpdater, which is called after a committed local write, after a completed
   sync run, and on sign-in / sign-out / account change.
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:configure="com.maghizhan.tabby.widget.WidgetConfigActivity"
     android:description="@string/widget_description"
     android:initialLayout="@layout/glance_default_loading_layout"
     android:minHeight="80dp"

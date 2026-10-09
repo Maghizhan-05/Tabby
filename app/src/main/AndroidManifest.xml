@@ -92,6 +92,29 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/tabby_widget_info" />
         </receiver>
+        <!--
+          The widget's configuration activity, started by the launcher when the
+          widget is dropped (android:configure in tabby_widget_info).
+
+          exported="true" is REQUIRED despite the receiver being private: the
+          launcher is a different process and starts this activity directly, so
+          an unexported one fails the placement with a SecurityException. It
+          takes no action without a valid EXTRA_APPWIDGET_ID, which only the
+          system supplies.
+
+          excludeFromRecents + NoDisplay-free dialog theme: it is a placement
+          step, not a destination, and should not linger in the task switcher.
+        -->
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="Tabby widget"
+            android:theme="@style/Theme.Tabby">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>

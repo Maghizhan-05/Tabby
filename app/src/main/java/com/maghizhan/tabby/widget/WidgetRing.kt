@@ -46,11 +46,25 @@ internal object WidgetRing {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = strokePx
-            strokeCap = Paint.Cap.BUTT
+            // ROUND, not BUTT. The iOS ring's arcs end in a half-circle, and
+            // square-ended arcs are the single clearest "this is a chart
+            // library" tell at widget scale — the shape of the cap is most of
+            // the difference between the two rings at a glance.
+            strokeCap = Paint.Cap.ROUND
         }
 
         val inset = strokePx / 2f
         val box = RectF(inset, inset, sizePx - inset, sizePx - inset)
+
+        // An unfilled track behind the arcs, as on iOS. Without it a ring made
+        // of one or two slices reads as a broken circle rather than a complete
+        // dial with a portion filled; the track is what says "this is the whole,
+        // and this much of it is yours".
+        val track = Paint(paint).apply {
+            color = TRACK_COLOR
+            strokeCap = Paint.Cap.BUTT
+        }
+        canvas.drawArc(box, 0f, 360f, false, track)
 
         // Proportions are divided as BigDecimal and only converted to float at
         // the draw call, so rounding cannot accumulate across slices and leave a
@@ -65,10 +79,17 @@ internal object WidgetRing {
             paint.color = ringColor(index).toArgb()
             if (single) {
                 // No neighbour to inset away from: a gap here would read as a
-                // ring that failed to close.
-                canvas.drawArc(box, startAngle, 360f, false, paint)
+                // ring that failed to close. Drawn BUTT-capped for the same
+                // reason — round caps on a full 360° arc overlap themselves at
+                // the seam and render as a visible lump.
+                val closed = Paint(paint).apply { strokeCap = Paint.Cap.BUTT }
+                canvas.drawArc(box, startAngle, 360f, false, closed)
             } else {
-                val gap = 2f
+                // The gap scales with the stroke rather than being a fixed 2°.
+                // Round caps already eat into the arc by half a stroke at each
+                // end, so a constant gap that looked right on an 86dp ring
+                // swallowed thin slices whole on a 44dp one.
+                val gap = (GAP_DEGREES_AT_UNIT_STROKE * strokePx / sizePx).coerceIn(1.5f, 6f)
                 canvas.drawArc(
                     box,
                     startAngle + gap / 2f,
@@ -82,6 +103,15 @@ internal object WidgetRing {
 
         return bitmap
     }
+
+    /**
+     * The unfilled remainder of the dial: white at ~7%, matching the iOS
+     * ring's track against the same near-black card.
+     */
+    private const val TRACK_COLOR = 0x12FFFFFF.toInt()
+
+    /** Gap between slices, expressed per unit of stroke-to-diameter ratio. */
+    private const val GAP_DEGREES_AT_UNIT_STROKE = 18f
 
     private fun createBitmap(width: Int, height: Int): Bitmap =
         Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)

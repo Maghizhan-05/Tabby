@@ -51,9 +51,6 @@ import com.maghizhan.tabby.ui.format.CurrencyFormat
 import com.maghizhan.tabby.ui.home.ringColor
 import com.maghizhan.tabby.ui.theme.TabbyPalette
 
-/** Per-widget persisted mode, so each placed instance keeps its own choice. */
-internal val WIDGET_MODE_KEY = stringPreferencesKey("tabby_widget_mode")
-
 /**
  * Home-screen widget: an account's spending total, cycled through day / week /
  * month / category presentations, plus a Quick Entry button.
@@ -86,7 +83,7 @@ class TabbyWidget : GlanceAppWidget() {
      * reads [LocalSize] to decide what to show.
      */
     override val sizeMode: SizeMode = SizeMode.Responsive(
-        setOf(SMALL_SIZE, MEDIUM_SIZE)
+        setOf(SMALL_SIZE, SQUARE_SIZE, MEDIUM_SIZE)
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -104,24 +101,48 @@ class TabbyWidget : GlanceAppWidget() {
         val quickEntry = quickEntryIntent(context)
 
         provideContent {
-            val mode = WidgetMode.fromName(currentState(WIDGET_MODE_KEY))
-            WidgetBody(snapshot = snapshot, mode = mode, quickEntry = quickEntry)
+            val config = WidgetConfig.from(currentState<Preferences>())
+            WidgetBody(snapshot = snapshot, config = config, quickEntry = quickEntry)
         }
     }
 
     @Composable
     private fun WidgetBody(
         snapshot: WidgetSnapshot?,
-        mode: WidgetMode,
+        config: WidgetConfig,
         quickEntry: Intent
     ) {
         val size = LocalSize.current
-        val isMedium = size.width >= MEDIUM_SIZE.width
+        val mode = config.mode
+
+        // Layout is chosen by SHAPE, not by matching a declared DpSize.
+        //
+        // SizeMode.Responsive buckets the cell to the nearest declared size,
+        // but launcher grids report whatever their own cell maths produces —
+        // a "square" placement is 140x132 on one launcher and 155x148 on
+        // another, and neither equals SQUARE_SIZE. Comparing against a literal
+        // would therefore pick the compact layout on one device and not the
+        // next. The aspect ratio is the property that actually distinguishes
+        // the layouts, so it is what the branch reads, with a width floor so a
+        // tall-but-narrow cell is not mistaken for a roomy one.
+        val aspect = if (size.height.value <= 0f) 1f else size.width / size.height
+        val isCompactShape = aspect <= COMPACT_ASPECT_CEILING
+        val isWide = !isCompactShape && size.width >= MEDIUM_SIZE.width
+
+        // Ring-only when the cell is squarish: the breakdown needs horizontal
+        // room the shape does not have, and the user asked for the iOS square
+        // family — ring plus the day's figure, nothing else.
+        val showBreakdown = config.showBreakdown && !isCompactShape
+        val showRing = config.showRing
+
         // The ring grows with the cell. A fixed 58dp ring looked deliberate in a
         // 2-row widget and lost in a 4-row one; the launcher lets the user
         // resize, so the art has to answer that.
         val ringSize = when {
-            !isMedium -> 44.dp
+            isCompactShape -> minOf(size.width.value, size.height.value)
+                .let { shortest -> (shortest * COMPACT_RING_FRACTION).dp }
+                .coerceIn(52.dp, 124.dp)
+            !isWide -> 44.dp
             size.height >= TALL_HEIGHT -> 86.dp
             else -> 58.dp
         }
@@ -182,23 +203,17 @@ class TabbyWidget : GlanceAppWidget() {
                     // selected period's own slices. Only CATEGORIES drew one
                     // before, so TODAY and THIS WEEK were a bare number on a
                     // widget whose whole point is the ring.
-                    isMedium ->
-                        // Medium: the ring beside its legend, as on the iOS
-                        // widget and the in-app breakdown.
-                        RingWithLegend(
-                            snapshot = snapshot,
-                            mode = mode,
-                            rows = WidgetSnapshot.MAXIMUM_SLICES,
-                            ringSize = ringSize
-                        )
                     else ->
-                        // Small: the ring with the leading category under it.
-                        // Four legend rows beside a ring do not fit a 2x1.
                         RingWithLegend(
                             snapshot = snapshot,
                             mode = mode,
-                            rows = 1,
-                            ringSize = ringSize
+                            // Four legend rows beside a ring do not fit a 2x1;
+                            // the compact shape shows none at all.
+                            rows = if (isWide) WidgetSnapshot.MAXIMUM_SLICES else 1,
+                            ringSize = ringSize,
+                            showRing = showRing,
+                            showBreakdown = showBreakdown,
+                            centreOnly = isCompactShape
                         )
                 }
                 }
@@ -245,14 +260,19 @@ class TabbyWidget : GlanceAppWidget() {
         snapshot: WidgetSnapshot,
         mode: WidgetMode,
         rows: Int,
-        ringSize: Dp
+        ringSize: Dp,
+        showRing: Boolean,
+        showBreakdown: Boolean,
+        centreOnly: Boolean
     ) {
         // The SELECTED mode's slices and total, not the month's. Hardcoding the
         // month drew a ring of the month's categories under a "TODAY" header
         // with the month's rupee figure in its centre — three different periods
         // in one widget.
         val slices = snapshot.slices(mode)
-        if (slices.isEmpty()) {
+        if (slices.isEmpty() || !showRing) {
+            // No ring to draw, or the user turned it off: the figure alone,
+            // sized up since it is now the only thing in the cell.
             TotalBody(total = CurrencyFormat.compact(snapshot.total(mode)))
             return
         }
@@ -265,38 +285,36 @@ class TabbyWidget : GlanceAppWidget() {
             strokePx = sizePx * 0.19f
         )
 
+        // Square cells centre the ring instead of pinning it to the leading
+        // edge: with no legend beside it, a start-aligned ring leaves the cell
+        // visibly lopsided.
+        if (centreOnly) {
+            Box(
+                modifier = GlanceModifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                RingWithCentreLabel(
+                    ring = ring,
+                    ringSize = ringSize,
+                    total = CurrencyFormat.compact(snapshot.total(mode))
+                )
+            }
+            return
+        }
+
         Row(
             modifier = GlanceModifier.fillMaxWidth(),
             verticalAlignment = Alignment.Vertical.CenterVertically
         ) {
             if (ring != null) {
-                // The ring's centre carries the period total, as on the iOS
-                // widget — an unlabelled ring makes the user open the app to
-                // learn what it adds up to. Glance has no canvas, so the label
-                // is stacked over the bitmap in a Box rather than drawn into it;
-                // keeping it as text means it still scales with the user's font
-                // size, which a rasterised label would not.
-                Box(
-                    modifier = GlanceModifier.size(ringSize),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        provider = ImageProvider(ring),
-                        contentDescription = "Spending by category",
-                        modifier = GlanceModifier.size(ringSize)
-                    )
-                    Text(
-                        text = CurrencyFormat.compact(snapshot.total(mode)),
-                        maxLines = 1,
-                        style = TextStyle(
-                            color = ColorProvider(TabbyPalette.ink),
-                            fontSize = if (ringSize >= 58.dp) 12.sp else 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                }
+                RingWithCentreLabel(
+                    ring = ring,
+                    ringSize = ringSize,
+                    total = CurrencyFormat.compact(snapshot.total(mode))
+                )
                 Spacer(modifier = GlanceModifier.width(10.dp))
             }
+            if (showBreakdown) {
             Column(modifier = GlanceModifier.defaultWeight()) {
                 slices.take(rows).forEachIndexed { index, slice ->
                     Row(
@@ -338,6 +356,50 @@ class TabbyWidget : GlanceAppWidget() {
                     }
                 }
             }
+            }
+        }
+    }
+
+    /**
+     * The ring bitmap with the period total stacked over its centre.
+     *
+     * Glance has no canvas, so the label cannot be drawn INTO the bitmap; it is
+     * layered in a Box instead. Keeping it as text rather than rasterising it
+     * also means it still honours the user's font scale, which a baked-in label
+     * would not.
+     */
+    @Composable
+    private fun RingWithCentreLabel(ring: android.graphics.Bitmap?, ringSize: Dp, total: String) {
+        if (ring == null) {
+            TotalBody(total = total)
+            return
+        }
+        Box(
+            modifier = GlanceModifier.size(ringSize),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                provider = ImageProvider(ring),
+                contentDescription = "Spending by category",
+                modifier = GlanceModifier.size(ringSize)
+            )
+            Text(
+                text = total,
+                maxLines = 1,
+                style = TextStyle(
+                    color = ColorProvider(TabbyPalette.ink),
+                    // Scales with the ring: a 12sp label centred in a 124dp
+                    // square ring is lost, and the figure is the point of the
+                    // compact layout.
+                    fontSize = when {
+                        ringSize >= 100.dp -> 20.sp
+                        ringSize >= 76.dp -> 16.sp
+                        ringSize >= 58.dp -> 12.sp
+                        else -> 10.sp
+                    },
+                    fontWeight = FontWeight.Bold
+                )
+            )
         }
     }
 
@@ -380,7 +442,30 @@ class TabbyWidget : GlanceAppWidget() {
 
     internal companion object {
         val SMALL_SIZE = DpSize(160.dp, 80.dp)
+
+        /**
+         * The squarish family the iOS widget uses: ring plus the period's
+         * figure, no breakdown.
+         *
+         * A declared bucket so Glance has a layout to resolve to, but NOT what
+         * the layout branch compares against — see [COMPACT_ASPECT_CEILING].
+         */
+        val SQUARE_SIZE = DpSize(150.dp, 150.dp)
         val MEDIUM_SIZE = DpSize(250.dp, 110.dp)
+
+        /**
+         * At or below this width-to-height ratio the cell is treated as the
+         * compact, ring-only shape.
+         *
+         * 1.25 rather than 1.0: launchers hand out cells that are nominally
+         * square but a little wider than tall once padding is removed, and
+         * demanding a true 1.0 would send most real "square" placements down
+         * the wide path.
+         */
+        const val COMPACT_ASPECT_CEILING = 1.25f
+
+        /** How much of a compact cell's shortest side the ring occupies. */
+        const val COMPACT_RING_FRACTION = 0.62f
 
         /** Past this the launcher has given us a tall cell worth a larger ring. */
         val TALL_HEIGHT = 180.dp
