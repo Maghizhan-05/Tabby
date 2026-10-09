@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,6 +29,7 @@ import com.maghizhan.tabby.ui.format.CurrencyFormat
 import com.maghizhan.tabby.ui.theme.Tabby
 import com.maghizhan.tabby.ui.theme.TabbyOrbit
 import com.maghizhan.tabby.ui.theme.TabbyShapes
+import com.maghizhan.tabby.ui.theme.moneyStyle
 import java.math.BigDecimal
 
 /** The card surface every analytics and list panel sits on. */
@@ -128,14 +128,11 @@ fun AmountHeadline(title: String, amount: BigDecimal, modifier: Modifier = Modif
             maxLines = 1,
             // Digits share one advance width, so a ticking total does not make
             // the headline jitter — the iOS `.monospacedDigit()`.
-            style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR_FIGURES),
+            style = moneyStyle(),
             textAlign = TextAlign.Center
         )
     }
 }
-
-/** OpenType tabular figures; the Compose spelling of iOS's `monospacedDigit()`. */
-internal const val TABULAR_FIGURES = "tnum"
 
 /** Shown in place of a chart when the selected period has no spending. */
 @Composable
@@ -204,7 +201,7 @@ fun LegendRow(
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
-                style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR_FIGURES),
+                style = moneyStyle(),
                 // The amount never shrinks for the label; it is the data.
                 softWrap = false
             )

@@ -27,7 +27,6 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -42,7 +41,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maghizhan.tabby.data.local.entity.FriendEntity
-import com.maghizhan.tabby.ui.common.TABULAR_FIGURES
 import com.maghizhan.tabby.ui.common.TabbyCard
 import androidx.compose.ui.graphics.Color
 import com.maghizhan.tabby.ui.common.SwipeAction
@@ -52,6 +50,7 @@ import com.maghizhan.tabby.ui.format.CurrencyFormat
 import com.maghizhan.tabby.ui.theme.Tabby
 import com.maghizhan.tabby.ui.theme.TabbyOrbit
 import com.maghizhan.tabby.ui.theme.TabbyShapes
+import com.maghizhan.tabby.ui.theme.moneyStyle
 import java.math.BigDecimal
 
 /**
@@ -123,7 +122,7 @@ fun FriendsScreen(
                         fontSize = 30.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
-                        style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR_FIGURES)
+                        style = moneyStyle()
                     )
                     Text(
                         text = when {
@@ -250,7 +249,7 @@ fun FriendsScreen(
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = TextAlign.End,
                                 maxLines = 1,
-                                style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR_FIGURES),
+                                style = moneyStyle(),
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -327,7 +326,7 @@ private fun androidx.compose.foundation.layout.RowScope.AmountCell(
         maxLines = 1,
         // Tabular figures so the three money columns line up down the table —
         // the iOS row uses `.monospacedDigit()` for the same reason.
-        style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR_FIGURES),
+        style = moneyStyle(),
         modifier = Modifier.weight(weight)
     )
 }

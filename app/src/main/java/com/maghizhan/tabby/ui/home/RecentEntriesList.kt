@@ -15,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,11 +27,11 @@ import com.maghizhan.tabby.data.local.entity.ExpenseEntity
 import com.maghizhan.tabby.ui.common.SwipeAction
 import com.maghizhan.tabby.ui.common.SwipeActionsRow
 import com.maghizhan.tabby.ui.common.SwipeRevealController
-import com.maghizhan.tabby.ui.common.TABULAR_FIGURES
 import com.maghizhan.tabby.ui.format.CurrencyFormat
 import com.maghizhan.tabby.ui.theme.CategoryAccent
 import com.maghizhan.tabby.ui.theme.Tabby
 import com.maghizhan.tabby.ui.theme.TabbyOrbit
+import com.maghizhan.tabby.ui.theme.moneyStyle
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -205,7 +204,7 @@ fun LazyListScope.recentEntries(
                 maxLines = 1,
                 // Tabular figures so a column of amounts aligns, as iOS's
                 // `.monospacedDigit()` does.
-                style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR_FIGURES),
+                style = moneyStyle(),
                 // Never shrink the amount to make room for the icons: the
                 // number is the point of the row.
                 softWrap = false

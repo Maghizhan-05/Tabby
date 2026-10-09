@@ -35,6 +35,7 @@ import com.maghizhan.tabby.ui.common.LegendRow
 import com.maghizhan.tabby.ui.format.CurrencyFormat
 import com.maghizhan.tabby.ui.theme.Tabby
 import com.maghizhan.tabby.ui.theme.TabbyPalette
+import com.maghizhan.tabby.ui.theme.moneyStyle
 import java.math.BigDecimal
 import java.math.RoundingMode
 
@@ -470,7 +471,10 @@ fun SelectionCallout(
                 text = "${CurrencyFormat.full(item.total)} · ${percent.toPlainString()}%",
                 color = colors.subtleInk,
                 fontSize = 11.sp,
-                maxLines = 1
+                maxLines = 1,
+                // The slice callout's amount is money, so it takes the rounded
+                // face and tabular figures like every other amount.
+                style = moneyStyle()
             )
         }
     }

@@ -188,6 +188,7 @@ fun TabbyTheme(content: @Composable () -> Unit) {
     ) {
         MaterialTheme(
             colorScheme = TabbyDarkColorScheme,
+            typography = TabbyTypography,
             shapes = Shapes(
                 large = TabbyShapes.card,
                 medium = TabbyShapes.control,
