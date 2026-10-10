@@ -21,6 +21,32 @@ rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use 
     localProperties.load(it)
 }
 
+/**
+ * Upload-key material is local-only. The checked-in sample documents the four
+ * required fields; the real file and keystore are both ignored by git.
+ */
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+keystorePropertiesFile.takeIf { it.exists() }?.inputStream()?.use {
+    keystoreProperties.load(it)
+}
+
+// Fail only when a release artifact was requested. Debug builds and unit tests
+// remain reproducible on CI and contributor machines without release secrets.
+val requestedTasks = gradle.startParameter.taskNames
+val releaseArtifactRequested = requestedTasks.any { task ->
+    task.contains("Release", ignoreCase = true) &&
+        (task.contains("assemble", ignoreCase = true) ||
+            task.contains("bundle", ignoreCase = true) ||
+            task.contains("package", ignoreCase = true) ||
+            task.contains("install", ignoreCase = true))
+}
+if (releaseArtifactRequested) {
+    require(keystorePropertiesFile.exists()) {
+        "Missing keystore.properties. Copy keystore.properties.example, point it at the Play upload key, and keep both files out of git."
+    }
+}
+
 
 android {
     namespace = "com.maghizhan.tabby"
@@ -32,6 +58,8 @@ android {
         // notification-channel APIs the replica needs are all 26+.
         minSdk = 26
         targetSdk = 36
+        // Release version — bump both values here before every Play upload.
+        // Play permanently consumes versionCode values, including rejected uploads.
         versionCode = 1
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -67,8 +95,30 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            if (keystorePropertiesFile.exists()) {
+                storeFile = rootProject.file(
+                    requireNotNull(keystoreProperties.getProperty("storeFile")) {
+                        "keystore.properties is missing storeFile"
+                    }
+                )
+                storePassword = requireNotNull(keystoreProperties.getProperty("storePassword")) {
+                    "keystore.properties is missing storePassword"
+                }
+                keyAlias = requireNotNull(keystoreProperties.getProperty("keyAlias")) {
+                    "keystore.properties is missing keyAlias"
+                }
+                keyPassword = requireNotNull(keystoreProperties.getProperty("keyPassword")) {
+                    "keystore.properties is missing keyPassword"
+                }
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
