@@ -100,4 +100,49 @@ class AnalyticsTest {
 
         assertEquals(1, buffer.peek().size)
     }
+
+    /**
+     * The server now enforces the same allowlist the client does
+     * (`analytics_events_name_allowlist` and `analytics_events_props_allowlist`
+     * in `supabase/migrations/202610100001_add_opt_in_analytics.sql`), so the
+     * privacy claim does not rest on app code alone.
+     *
+     * That only holds while the two agree: a client event carrying a key the
+     * CHECK constraint does not list is rejected at insert time and the whole
+     * batch is dropped. This pins the contract so adding a property here fails
+     * loudly instead of silently disabling analytics in production.
+     */
+    @Test
+    fun `every emitted event matches the server side allowlist`() {
+        val serverEventNames = setOf(
+            "app_opened", "screen_viewed", "expense_logged", "expense_edited",
+            "expense_deleted", "category_created", "category_deleted",
+            "friend_created", "friend_updated", "period_changed", "widget_placed",
+            "widget_tapped", "widget_period_cycled", "sync_completed", "sign_in",
+            "account_deleted"
+        )
+        val serverPropKeys = setOf(
+            "cold_start", "screen", "has_note", "amount_bucket", "period",
+            "shape", "duration_ms", "pushed", "pulled", "provider"
+        )
+
+        AnalyticsEvent.samples().forEach { event ->
+            val record = event.toRecord("user-1", "test")
+            assertTrue(
+                "${record.name} is not in the server name allowlist",
+                record.name in serverEventNames
+            )
+            record.props.keys.forEach { key ->
+                assertTrue(
+                    "${record.name} sends property '$key', which the server rejects",
+                    key in serverPropKeys
+                )
+            }
+            // The server also caps the serialised payload; stay far below it.
+            assertTrue(
+                "${record.name} props exceed the server size limit",
+                json.encodeToString(record.props).length <= 512
+            )
+        }
+    }
 }
