@@ -43,6 +43,9 @@ import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.lifecycle.lifecycleScope
 import com.maghizhan.tabby.ui.common.TabbyCard
+import com.maghizhan.tabby.AppGraph
+import com.maghizhan.tabby.analytics.AnalyticsEvent
+import com.maghizhan.tabby.analytics.WidgetShape
 import com.maghizhan.tabby.ui.theme.Tabby
 import com.maghizhan.tabby.ui.theme.TabbyBackdrop
 import com.maghizhan.tabby.ui.theme.TabbyShapes
@@ -116,6 +119,9 @@ class WidgetConfigActivity : ComponentActivity() {
             // so the widget never appears with defaults and then visibly
             // changes a moment later.
             TabbyWidget().update(this@WidgetConfigActivity, glanceId)
+            AppGraph.from(this@WidgetConfigActivity).analyticsTracker.track(
+                AnalyticsEvent.WidgetPlaced(widgetShape())
+            )
 
             // Rule 2: only now is the placement accepted.
             setResult(Activity.RESULT_OK, resultIntent())
@@ -126,6 +132,13 @@ class WidgetConfigActivity : ComponentActivity() {
     /** Every result must echo the id, or the launcher cannot match it. */
     private fun resultIntent(): Intent =
         Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+
+    private fun widgetShape(): WidgetShape {
+        val options = AppWidgetManager.getInstance(this).getAppWidgetOptions(appWidgetId)
+        val width = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 1)
+        val height = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 1)
+        return if (width.toFloat() / height <= 1.25f) WidgetShape.SQUARE else WidgetShape.WIDE
+    }
 }
 
 @Composable

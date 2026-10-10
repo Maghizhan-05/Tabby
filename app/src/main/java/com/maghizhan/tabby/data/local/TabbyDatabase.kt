@@ -60,5 +60,10 @@ abstract class TabbyDatabase : RoomDatabase() {
                     .build()
                     .also { instance = it }
             }
+
+        /** Clears every local account row after remote deletion succeeds. */
+        suspend fun clearAccountData(context: Context) {
+            get(context).clearAllTables()
+        }
     }
 }

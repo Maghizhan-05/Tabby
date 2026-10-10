@@ -20,6 +20,7 @@ import com.maghizhan.tabby.ui.auth.AuthUiState
 import com.maghizhan.tabby.ui.auth.AuthViewModel
 import com.maghizhan.tabby.ui.nav.RootNav
 import com.maghizhan.tabby.ui.theme.TabbyTheme
+import com.maghizhan.tabby.analytics.AnalyticsEvent
 import kotlinx.coroutines.launch
 
 /**
@@ -30,7 +31,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     /** The application object graph; see [AppGraph] for what is wired to what. */
-    private val graph: AppGraph by lazy { AppGraph(applicationContext) }
+    private val graph: AppGraph by lazy { AppGraph.from(applicationContext) }
 
     /**
      * Retained in the activity's [androidx.lifecycle.ViewModelStore].
@@ -77,6 +78,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         handledCallbackUrl = savedInstanceState?.getString(STATE_HANDLED_CALLBACK)
+
+        lifecycleScope.launch {
+            graph.analyticsTracker.track(AnalyticsEvent.AppOpened(coldStart = !processOpened))
+            processOpened = true
+        }
 
         // Sync runs when a session becomes available, which is the first moment
         // it can: before this, local rows may exist that the backend has never
@@ -187,13 +193,26 @@ class MainActivity : ComponentActivity() {
 
         quickEntryState.retainedIntentConsumed = true
         QuickEntryLauncher.request(requestId)
+        if (intent?.getStringExtra(EXTRA_QUICK_ENTRY_SOURCE) == QUICK_ENTRY_SOURCE_WIDGET) {
+            lifecycleScope.launch {
+                graph.analyticsTracker.track(
+                    AnalyticsEvent.WidgetTapped(com.maghizhan.tabby.analytics.WidgetShape.WIDE)
+                )
+            }
+            intent.removeExtra(EXTRA_QUICK_ENTRY_SOURCE)
+        }
     }
 
     companion object {
         /** Set by the launcher shortcut and the widget's tap action. */
         const val EXTRA_QUICK_ENTRY = MainActivityExtras.QUICK_ENTRY
+        const val EXTRA_QUICK_ENTRY_SOURCE = "com.maghizhan.tabby.extra.QUICK_ENTRY_SOURCE"
+        const val QUICK_ENTRY_SOURCE_WIDGET = "widget"
 
         private const val STATE_HANDLED_CALLBACK = "handledCallbackUrl"
+
+        @Volatile
+        private var processOpened = false
     }
 
     /**
@@ -226,7 +245,15 @@ class MainActivity : ComponentActivity() {
             // handleOAuthCallback resolves the router itself where that is the
             // right outcome, so this catch only stops a callback failure from
             // taking the activity down.
-            runCatching { authViewModel.handleOAuthCallback(url) }
+            runCatching {
+                authViewModel.handleOAuthCallback(url)
+                if (graph.deletionRequests.isPending() &&
+                    authViewModel.uiState.value is AuthUiState.Authenticated
+                ) {
+                    graph.accountDeletion.deleteImmediately()
+                    authViewModel.signOut()
+                }
+            }
         }
     }
 }

@@ -38,4 +38,11 @@ class ReleaseConfigurationTest {
         assertTrue(buildScript.contains("versionCode = 1"))
         assertTrue(buildScript.contains("versionName = \"1.0.0\""))
     }
+
+    @Test
+    fun `release build has an advertising id manifest tripwire`() {
+        assertTrue(buildScript.contains("assertNoAdvertisingId"))
+        assertTrue(buildScript.contains("com.google.android.gms.permission.AD_ID"))
+        assertTrue(buildScript.contains("Advertising ID permission detected"))
+    }
 }

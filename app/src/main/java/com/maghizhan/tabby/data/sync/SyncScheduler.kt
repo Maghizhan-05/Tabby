@@ -46,6 +46,7 @@ class SyncScheduler(
     private val categories: CategorySyncCoordinator,
     private val friends: FriendSyncCoordinator,
     private val sessions: SessionProvider,
+    private val onAnalytics: suspend (SyncRun, Long) -> Unit = { _, _ -> },
     /**
      * Called after a completed run with the account that ran.
      *
@@ -69,6 +70,7 @@ class SyncScheduler(
      * sign-in.
      */
     suspend fun runNow(): SyncRun = runMutex.withLock {
+        val startedAt = System.nanoTime()
         val session = sessions.current()
             ?: return@withLock SyncRun(skippedReason = "signed out")
 
@@ -85,11 +87,13 @@ class SyncScheduler(
         // sync run.
         onRunCompleted(session.ownerId)
 
-        SyncRun(
+        val run = SyncRun(
             categories = categoryOutcome,
             friends = friendOutcome,
             expenses = expenseOutcome
         )
+        onAnalytics(run, (System.nanoTime() - startedAt) / 1_000_000)
+        run
     }
 
     /**

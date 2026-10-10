@@ -4,6 +4,12 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.http.HttpHeaders
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
@@ -40,7 +46,13 @@ class SupabaseAuthService : AuthServicing {
         val status = auth.sessionStatus.first { it !is SessionStatus.Initializing }
         return when (status) {
             is SessionStatus.Authenticated -> status.session.user?.let {
-                AuthSession(userId = it.id, email = it.email)
+                AuthSession(
+                    userId = it.id,
+                    email = it.email,
+                    provider = if (it.identities.orEmpty().any { identity ->
+                            identity.provider == "google"
+                        }) AuthProvider.GOOGLE else AuthProvider.EMAIL
+                )
             }
             else -> null
         }
@@ -135,6 +147,26 @@ class SupabaseAuthService : AuthServicing {
     override suspend fun signOut() {
         val auth = client?.auth ?: throw AuthError.NotConfigured
         auth.signOut()
+    }
+
+    override suspend fun reauthenticateEmail(password: String) {
+        val email = client?.auth?.currentUserOrNull()?.email
+            ?: throw AuthError.Underlying("No email is available for this account.")
+        signInEmail(email, password)
+    }
+
+    override suspend fun deleteCurrentAccount() {
+        val auth = client?.auth ?: throw AuthError.NotConfigured
+        val token = auth.currentAccessTokenOrNull() ?: throw NotAuthenticatedException()
+        val response = HttpClient(CIO).use { http ->
+            http.post("${SupabaseClientProvider.url}/functions/v1/delete-account") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                header("apikey", SupabaseClientProvider.publishableKey)
+            }
+        }
+        if (!response.status.isSuccess()) {
+            throw AuthError.Underlying("Account deletion could not be completed. Try again.")
+        }
     }
 
     private suspend fun requireSession(): AuthSession =

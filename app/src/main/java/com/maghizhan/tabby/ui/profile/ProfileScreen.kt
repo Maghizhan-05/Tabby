@@ -22,11 +22,14 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maghizhan.tabby.data.local.entity.CategoryEntity
+import com.maghizhan.tabby.data.remote.AuthProvider
 import com.maghizhan.tabby.ui.common.TabbyCard
 import com.maghizhan.tabby.ui.theme.Tabby
 import com.maghizhan.tabby.ui.theme.TabbyOrbit
@@ -46,6 +50,14 @@ fun ProfileScreen(
     categoryCount: Int,
     onBack: () -> Unit,
     onManageCategories: () -> Unit,
+    analyticsEnabled: Boolean,
+    onAnalyticsChanged: (Boolean) -> Unit,
+    deletionProvider: AuthProvider,
+    deletionState: AccountDeletionUiState,
+    onDeleteAccount: () -> Unit,
+    onDeleteDismiss: () -> Unit,
+    onDeletePasswordChanged: (String) -> Unit,
+    onDeleteConfirm: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -111,7 +123,43 @@ fun ProfileScreen(
             )
         }
 
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.surface.copy(alpha = 0.82f), TabbyShapes.control)
+                .border(1.dp, colors.hairline, TabbyShapes.control)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Share anonymous usage analytics",
+                    color = colors.ink,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "Optional and off by default. Never includes notes, names, email, or exact amounts.",
+                    color = colors.subtleInk,
+                    fontSize = 12.sp
+                )
+            }
+            Switch(checked = analyticsEnabled, onCheckedChange = onAnalyticsChanged)
+        }
+
         Box(modifier = Modifier.weight(1f))
+
+        TextButton(
+            onClick = onDeleteAccount,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(imageVector = Icons.Filled.Delete, contentDescription = null, tint = colors.negative)
+            Text(
+                text = "Delete account",
+                color = colors.negative,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
 
         Button(
             onClick = onSignOut,
@@ -137,6 +185,48 @@ fun ProfileScreen(
                 modifier = Modifier.padding(start = 8.dp)
             )
         }
+    }
+
+    if (deletionState.isPresented) {
+        AlertDialog(
+            onDismissRequest = onDeleteDismiss,
+            title = { Text("Delete account permanently?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "This permanently deletes your profile, expenses, categories, friends, " +
+                            "and optional analytics. It cannot be undone."
+                    )
+                    if (deletionProvider == AuthProvider.EMAIL) {
+                        OutlinedTextField(
+                            value = deletionState.password,
+                            onValueChange = onDeletePasswordChanged,
+                            label = { Text("Password") },
+                            singleLine = true
+                        )
+                    } else {
+                        Text("You’ll confirm ownership with Google before deletion.")
+                    }
+                    deletionState.notice?.let {
+                        Text(text = it, color = colors.negative, fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onDeleteConfirm, enabled = !deletionState.isBusy) {
+                    Text(
+                        text = if (deletionState.isBusy) "Deleting…" else "Delete permanently",
+                        color = colors.negative
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDeleteDismiss, enabled = !deletionState.isBusy) {
+                    Text("Cancel")
+                }
+            },
+            containerColor = colors.elevatedSurface
+        )
     }
 }
 

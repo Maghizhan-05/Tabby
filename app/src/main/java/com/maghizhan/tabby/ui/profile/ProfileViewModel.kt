@@ -9,6 +9,7 @@ import com.maghizhan.tabby.data.local.CategoryStore
 import com.maghizhan.tabby.data.local.entity.CategoryEntity
 import com.maghizhan.tabby.data.sync.Ownership
 import com.maghizhan.tabby.data.sync.SyncState
+import com.maghizhan.tabby.analytics.AnalyticsEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -79,7 +80,8 @@ data class ProfileUiState(
 
 class ProfileViewModel(
     private val categoryStore: CategoryStore,
-    private val onLocalWrite: suspend () -> Unit
+    private val onLocalWrite: suspend () -> Unit,
+    private val onAnalytics: suspend (AnalyticsEvent) -> Unit = {}
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -119,6 +121,7 @@ class ProfileViewModel(
                     ),
                     owner
                 )
+                onAnalytics(AnalyticsEvent.CategoryCreated)
                 _uiState.value = ProfileUiState()
                 onLocalWrite()
             } catch (cancellation: CancellationException) {
@@ -141,9 +144,10 @@ class ProfileViewModel(
     companion object {
         fun factory(
             categoryStore: CategoryStore,
-            onLocalWrite: suspend () -> Unit
+            onLocalWrite: suspend () -> Unit,
+            onAnalytics: suspend (AnalyticsEvent) -> Unit = {}
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { ProfileViewModel(categoryStore, onLocalWrite) }
+            initializer { ProfileViewModel(categoryStore, onLocalWrite, onAnalytics) }
         }
     }
 
@@ -157,6 +161,7 @@ class ProfileViewModel(
                     category.copy(syncStateRaw = SyncState.DELETED.raw),
                     owner
                 )
+                onAnalytics(AnalyticsEvent.CategoryDeleted)
                 onLocalWrite()
             } catch (cancellation: CancellationException) {
                 throw cancellation

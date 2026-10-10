@@ -47,6 +47,9 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.maghizhan.tabby.MainActivity
+import com.maghizhan.tabby.AppGraph
+import com.maghizhan.tabby.analytics.AnalyticsEvent
+import com.maghizhan.tabby.analytics.WidgetShape
 import com.maghizhan.tabby.ui.format.CurrencyFormat
 import com.maghizhan.tabby.ui.home.ringColor
 import com.maghizhan.tabby.ui.theme.TabbyPalette
@@ -509,6 +512,7 @@ class TabbyWidget : GlanceAppWidget() {
         internal fun quickEntryIntent(context: Context): Intent =
             Intent(context, MainActivity::class.java).apply {
                 putExtra(MainActivity.EXTRA_QUICK_ENTRY, true)
+                putExtra("com.maghizhan.tabby.extra.QUICK_ENTRY_SOURCE", "widget")
             }
     }
 }
@@ -531,6 +535,9 @@ class CycleWidgetModeAction : ActionCallback {
             preferences[WIDGET_MODE_KEY] = current.next().name
         }
         TabbyWidget().update(context, glanceId)
+        AppGraph.from(context).analyticsTracker.track(
+            AnalyticsEvent.WidgetPeriodCycled(WidgetShape.WIDE)
+        )
     }
 }
 

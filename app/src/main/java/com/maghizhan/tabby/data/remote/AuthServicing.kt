@@ -1,7 +1,13 @@
 package com.maghizhan.tabby.data.remote
 
 /** A minimal session representation independent of the backend SDK. */
-data class AuthSession(val userId: String, val email: String?)
+enum class AuthProvider { EMAIL, GOOGLE }
+
+data class AuthSession(
+    val userId: String,
+    val email: String?,
+    val provider: AuthProvider = AuthProvider.EMAIL
+)
 
 /** Auth failures surfaced to the UI. */
 sealed class AuthError(message: String) : Exception(message) {
@@ -42,6 +48,13 @@ interface AuthServicing {
 
     /** Phase 2: validates the callback URL and exchanges its PKCE code. */
     suspend fun completeOAuth(callbackUrl: String): AuthSession
+
+    suspend fun reauthenticateEmail(password: String) {
+        throw UnsupportedOperationException("Email re-authentication is not implemented.")
+    }
+    suspend fun deleteCurrentAccount() {
+        throw UnsupportedOperationException("Account deletion is not implemented.")
+    }
 
     suspend fun signOut()
 }

@@ -41,6 +41,8 @@ class PreferencesOAuthTransactionStore(context: Context) : OAuthTransactionStore
 
     override fun clear() = preferences.edit().remove(KEY).apply()
 
+    fun clearAll() = preferences.edit().clear().apply()
+
     private companion object {
         const val FILE = "tabby_oauth_transaction"
         const val KEY = "pending"

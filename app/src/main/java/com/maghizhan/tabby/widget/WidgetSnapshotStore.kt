@@ -1,6 +1,8 @@
 package com.maghizhan.tabby.widget
 
 import android.content.Context
+import androidx.glance.appwidget.GlanceAppWidgetManager
+import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.appwidget.updateAll
 import com.maghizhan.tabby.data.local.ExpenseDao
 import kotlinx.coroutines.CancellationException
@@ -105,6 +107,23 @@ class WidgetUpdater(
     suspend fun setActiveOwner(ownerId: String?) {
         activeOwnerId = ownerId?.trim()?.takeIf { it.isNotEmpty() }
         refresh()
+    }
+
+    /** Clears account content and per-instance Glance preferences after deletion. */
+    suspend fun clearAllForAccountDeletion() {
+        activeOwnerId = null
+        store.clear()
+        val widget = TabbyWidget()
+        GlanceAppWidgetManager(context).getGlanceIds(widget.javaClass).forEach { id ->
+            updateAppWidgetState(context, id) { preferences -> preferences.clear() }
+        }
+        try {
+            widget.updateAll(context)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            // The state is already clear; the host can recover on its next update.
+        }
     }
 
     /** Recomputes the snapshot for the active owner and redraws the widget. */

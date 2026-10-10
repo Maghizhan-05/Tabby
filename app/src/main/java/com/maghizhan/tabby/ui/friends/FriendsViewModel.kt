@@ -9,6 +9,7 @@ import com.maghizhan.tabby.data.local.FriendStore
 import com.maghizhan.tabby.data.local.entity.FriendEntity
 import com.maghizhan.tabby.data.sync.Ownership
 import com.maghizhan.tabby.data.sync.SyncState
+import com.maghizhan.tabby.analytics.AnalyticsEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -92,6 +93,7 @@ object FriendsForm {
 class FriendsViewModel(
     private val friendStore: FriendStore,
     private val onLocalWrite: suspend () -> Unit,
+    private val onAnalytics: suspend (AnalyticsEvent) -> Unit = {},
     private val now: () -> Instant = Instant::now
 ) : ViewModel() {
 
@@ -174,6 +176,7 @@ class FriendsViewModel(
                 )
 
                 friendStore.save(entity, owner)
+                onAnalytics(if (existing == null) AnalyticsEvent.FriendCreated else AnalyticsEvent.FriendUpdated)
                 _editState.value = FriendEditState()
                 onLocalWrite()
             } catch (cancellation: CancellationException) {
@@ -196,9 +199,10 @@ class FriendsViewModel(
     companion object {
         fun factory(
             friendStore: FriendStore,
-            onLocalWrite: suspend () -> Unit
+            onLocalWrite: suspend () -> Unit,
+            onAnalytics: suspend (AnalyticsEvent) -> Unit = {}
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { FriendsViewModel(friendStore, onLocalWrite) }
+            initializer { FriendsViewModel(friendStore, onLocalWrite, onAnalytics = onAnalytics) }
         }
     }
 

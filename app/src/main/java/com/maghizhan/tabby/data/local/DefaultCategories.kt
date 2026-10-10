@@ -24,6 +24,7 @@ import java.util.UUID
 interface SeedMarker {
     fun hasSeeded(): Boolean
     fun markSeeded()
+    fun clear()
 }
 
 /** The production marker. */
@@ -35,6 +36,7 @@ class PreferencesSeedMarker(context: Context) : SeedMarker {
     override fun hasSeeded(): Boolean = preferences.getBoolean(KEY, false)
 
     override fun markSeeded() = preferences.edit().putBoolean(KEY, true).apply()
+    override fun clear() = preferences.edit().clear().apply()
 
     private companion object {
         const val FILE = "tabby_seeding"
@@ -46,6 +48,7 @@ class PreferencesSeedMarker(context: Context) : SeedMarker {
 class InMemorySeedMarker(private var seeded: Boolean = false) : SeedMarker {
     override fun hasSeeded(): Boolean = seeded
     override fun markSeeded() { seeded = true }
+    override fun clear() { seeded = false }
 }
 
 /**

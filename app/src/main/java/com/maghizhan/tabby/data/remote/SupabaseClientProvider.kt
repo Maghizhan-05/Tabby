@@ -20,13 +20,13 @@ import io.github.jan.supabase.postgrest.Postgrest
 object SupabaseClientProvider {
 
     val url: String = BuildConfig.SUPABASE_URL
-    private val key: String = BuildConfig.SUPABASE_PUBLISHABLE_KEY
+    val publishableKey: String = BuildConfig.SUPABASE_PUBLISHABLE_KEY
 
-    val isConfigured: Boolean = url.isNotBlank() && key.isNotBlank()
+    val isConfigured: Boolean = url.isNotBlank() && publishableKey.isNotBlank()
 
     val client: SupabaseClient? by lazy {
         if (!isConfigured) return@lazy null
-        createSupabaseClient(supabaseUrl = url, supabaseKey = key) {
+        createSupabaseClient(supabaseUrl = url, supabaseKey = publishableKey) {
             install(Auth) {
                 // Supabase-kt persists and refreshes the session itself; this is
                 // what the three-state router waits for on launch.

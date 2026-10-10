@@ -1,6 +1,17 @@
 package com.maghizhan.tabby
 
 import android.content.Context
+import com.maghizhan.tabby.account.AccountDeletionAnalytics
+import com.maghizhan.tabby.account.AccountDeletionCoordinator
+import com.maghizhan.tabby.account.LocalAccountData
+import com.maghizhan.tabby.account.AccountDeletionRequestStore
+import com.maghizhan.tabby.analytics.AnalyticsBuffer
+import com.maghizhan.tabby.analytics.AnalyticsEvent
+import com.maghizhan.tabby.analytics.AnalyticsTracker
+import com.maghizhan.tabby.analytics.AnalyticsUploader
+import com.maghizhan.tabby.analytics.PreferencesAnalyticsBuffer
+import com.maghizhan.tabby.analytics.PreferencesAnalyticsConsentStore
+import com.maghizhan.tabby.analytics.SupabaseAnalyticsTransport
 import com.maghizhan.tabby.data.local.CategoryStore
 import com.maghizhan.tabby.data.local.DefaultCategories
 import com.maghizhan.tabby.data.local.EntryWriter
@@ -35,11 +46,22 @@ import com.maghizhan.tabby.widget.WidgetUpdater
  */
 class AppGraph(context: Context) {
 
+    private val appContext = context.applicationContext
     private val database = TabbyDatabase.get(context)
     private val transactions = RoomTransactionRunner(database)
 
     val sessions: SessionProvider = SupabaseSessionProvider()
     val authService = SupabaseAuthService()
+    val deletionRequests = AccountDeletionRequestStore(appContext)
+
+    private val analyticsBuffer: AnalyticsBuffer = PreferencesAnalyticsBuffer(appContext)
+    val analyticsConsent = PreferencesAnalyticsConsentStore(appContext)
+    val analyticsTracker = AnalyticsTracker(
+        consent = analyticsConsent,
+        buffer = analyticsBuffer,
+        userId = { com.maghizhan.tabby.data.remote.SupabaseClientProvider.currentUserId() }
+    )
+    private val analyticsUploader = AnalyticsUploader(analyticsBuffer, SupabaseAnalyticsTransport()::upload)
 
     /** Durable record of a pending OAuth transaction; see [OAuthTransactionStore]. */
     val oauthTransactions: OAuthTransactionStore = PreferencesOAuthTransactionStore(context)
@@ -71,6 +93,25 @@ class AppGraph(context: Context) {
     )
 
     private val seedMarker: SeedMarker = PreferencesSeedMarker(context)
+
+    val accountDeletion = AccountDeletionCoordinator(
+        analytics = object : AccountDeletionAnalytics {
+            override suspend fun track(event: AnalyticsEvent) = analyticsTracker.track(event)
+            override suspend fun flush() = analyticsUploader.flushQuietly()
+            override suspend fun clear() = analyticsTracker.clear()
+        },
+        remote = authService::deleteCurrentAccount,
+        local = object : LocalAccountData {
+            override suspend fun clearRoom() = TabbyDatabase.clearAccountData(appContext)
+            override suspend fun clearPreferences() {
+                seedMarker.clear()
+                oauthTransactions.clear()
+                deletionRequests.clear()
+            }
+            override suspend fun clearWidgets() = widgetUpdater.clearAllForAccountDeletion()
+        },
+        signOutLocal = authService::signOut
+    )
 
     /**
      * Seeds the eight default categories on first run.
@@ -109,8 +150,41 @@ class AppGraph(context: Context) {
         categories = categoryCoordinator,
         friends = friendCoordinator,
         sessions = sessions,
+        onAnalytics = { run, durationMs ->
+            if (run.categories != null && run.friends != null && run.expenses != null) {
+                val outcomes = listOf(run.categories, run.friends, run.expenses).filterNotNull()
+                analyticsTracker.track(
+                    AnalyticsEvent.SyncCompleted(
+                        durationMs = durationMs,
+                        pushed = outcomes.sumOf { it.pushed },
+                        pulled = outcomes.sumOf { it.pulled }
+                    )
+                )
+            }
+        },
         // Reconciliation is where another device's edits and deletes land, so a
         // completed run is a moment the widget's numbers can have changed.
-        onRunCompleted = { owner -> widgetUpdater.setActiveOwner(owner) }
+        onRunCompleted = { owner ->
+            widgetUpdater.setActiveOwner(owner)
+            analyticsUploader.flushQuietly()
+        }
     )
+
+    companion object {
+        @Volatile
+        private var instance: AppGraph? = null
+
+        /**
+         * Process-wide graph.
+         *
+         * Widget action callbacks and the configuration activity run outside
+         * MainActivity, so they cannot reach its lazily-held graph; without a
+         * shared accessor each surface would build its own copy of every
+         * coordinator.
+         */
+        fun from(context: Context): AppGraph =
+            instance ?: synchronized(this) {
+                instance ?: AppGraph(context.applicationContext).also { instance = it }
+            }
+    }
 }

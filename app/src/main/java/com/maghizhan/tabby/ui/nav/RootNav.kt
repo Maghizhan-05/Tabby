@@ -13,11 +13,14 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,6 +36,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.maghizhan.tabby.AppGraph
+import com.maghizhan.tabby.analytics.AnalyticsEvent
+import com.maghizhan.tabby.analytics.AnalyticsScreen
 import com.maghizhan.tabby.data.QuickEntryLauncher
 import com.maghizhan.tabby.data.local.entity.ExpenseEntity
 import com.maghizhan.tabby.data.sync.SyncScheduler
@@ -49,11 +54,13 @@ import com.maghizhan.tabby.ui.friends.FriendsViewModel
 import com.maghizhan.tabby.ui.home.HomeScreen
 import com.maghizhan.tabby.ui.home.HomeViewModel
 import com.maghizhan.tabby.ui.profile.CategoryRules
+import com.maghizhan.tabby.ui.profile.AccountDeletionViewModel
 import com.maghizhan.tabby.ui.profile.ManageCategoriesScreen
 import com.maghizhan.tabby.ui.profile.ProfileScreen
 import com.maghizhan.tabby.ui.profile.ProfileViewModel
 import com.maghizhan.tabby.ui.theme.Tabby
 import com.maghizhan.tabby.ui.theme.TabbyBackdrop
+import kotlinx.coroutines.launch
 
 private object Routes {
     const val HOME = "home"
@@ -104,7 +111,9 @@ fun RootNav(
                 graph = graph,
                 ownerId = state.session.userId,
                 email = state.session.email,
+                provider = state.session.provider,
                 syncScheduler = syncScheduler,
+                onBeginGoogleReauthentication = authViewModel::startGoogleSignIn,
                 onSignOut = authViewModel::requestSignOut
             )
         }
@@ -123,10 +132,13 @@ private fun AuthenticatedHost(
     graph: AppGraph,
     ownerId: String,
     email: String?,
+    provider: com.maghizhan.tabby.data.remote.AuthProvider,
     syncScheduler: SyncScheduler,
+    onBeginGoogleReauthentication: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val colors = Tabby.colors
+    val scope = rememberCoroutineScope()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination
@@ -143,18 +155,33 @@ private fun AuthenticatedHost(
         syncScheduler.onLocalWrite()
     }
 
-    val homeViewModel: HomeViewModel = viewModel(key = "home-$ownerId")
+    val analytics: suspend (AnalyticsEvent) -> Unit = graph.analyticsTracker::track
+    val homeViewModel: HomeViewModel = viewModel(
+        key = "home-$ownerId",
+        factory = HomeViewModel.factory(analytics)
+    )
     val entryViewModel: EntryViewModel = viewModel(
         key = "entry-$ownerId",
-        factory = EntryViewModel.factory(graph.entryWriter, graph.expenseStore, onLocalWrite)
+        factory = EntryViewModel.factory(graph.entryWriter, graph.expenseStore, onLocalWrite, analytics)
     )
     val friendsViewModel: FriendsViewModel = viewModel(
         key = "friends-$ownerId",
-        factory = FriendsViewModel.factory(graph.friendStore, onLocalWrite)
+        factory = FriendsViewModel.factory(graph.friendStore, onLocalWrite, analytics)
     )
     val profileViewModel: ProfileViewModel = viewModel(
         key = "profile-$ownerId",
-        factory = ProfileViewModel.factory(graph.categoryStore, onLocalWrite)
+        factory = ProfileViewModel.factory(graph.categoryStore, onLocalWrite, analytics)
+    )
+    val deletionViewModel: AccountDeletionViewModel = viewModel(
+        key = "account-deletion-$ownerId",
+        factory = AccountDeletionViewModel.factory(
+            provider = provider,
+            auth = graph.authService,
+            coordinator = graph.accountDeletion,
+            pendingGoogle = graph.deletionRequests,
+            beginGoogleReauthentication = onBeginGoogleReauthentication,
+            onDeleted = onSignOut
+        )
     )
 
     // The DAO flows are already owner-scoped and tombstone-filtered in SQL, so
@@ -174,9 +201,25 @@ private fun AuthenticatedHost(
     val selectedCategory by homeViewModel.selectedCategory.collectAsStateWithLifecycle()
     val friendEdit by friendsViewModel.editState.collectAsStateWithLifecycle()
     val profileState by profileViewModel.uiState.collectAsStateWithLifecycle()
+    val deletionState by deletionViewModel.state.collectAsStateWithLifecycle()
+    var analyticsEnabled by remember { mutableStateOf(graph.analyticsTracker.isEnabled()) }
+    var showAnalyticsDisclosure by remember {
+        mutableStateOf(!graph.analyticsTracker.hasAnsweredDisclosure())
+    }
+
 
     var showEntrySheet by remember { mutableStateOf(false) }
     var editingExpense by remember { mutableStateOf<ExpenseEntity?>(null) }
+
+    LaunchedEffect(currentRoute?.route) {
+        val screen = when (currentRoute?.route) {
+            Routes.HOME -> AnalyticsScreen.HOME
+            Routes.FRIENDS -> AnalyticsScreen.FRIENDS
+            Routes.PROFILE -> AnalyticsScreen.PROFILE
+            else -> null
+        }
+        if (screen != null) analytics(AnalyticsEvent.ScreenViewed(screen))
+    }
 
     // Shortcut and widget taps. Collected here rather than in the activity so a
     // request can only open the sheet once the user is actually signed in —
@@ -192,6 +235,7 @@ private fun AuthenticatedHost(
         editingExpense = null
         entryViewModel.startNew()
         showEntrySheet = true
+        analytics(AnalyticsEvent.ScreenViewed(AnalyticsScreen.QUICK_ENTRY))
         QuickEntryLauncher.consume(requestId)
     }
 
@@ -317,6 +361,19 @@ private fun AuthenticatedHost(
                     categoryCount = categories.size,
                     onBack = { navController.popBackStack() },
                     onManageCategories = { navController.navigate(Routes.CATEGORIES) },
+                    analyticsEnabled = analyticsEnabled,
+                    onAnalyticsChanged = { enabled ->
+                        analyticsEnabled = enabled
+                        scope.launch {
+                            graph.analyticsTracker.setConsent(enabled)
+                        }
+                    },
+                    deletionProvider = provider,
+                    deletionState = deletionState,
+                    onDeleteAccount = deletionViewModel::present,
+                    onDeleteDismiss = deletionViewModel::dismiss,
+                    onDeletePasswordChanged = deletionViewModel::onPasswordChanged,
+                    onDeleteConfirm = deletionViewModel::confirm,
                     onSignOut = onSignOut
                 )
             }
@@ -353,6 +410,35 @@ private fun AuthenticatedHost(
                 editingExpense = null
                 entryViewModel.consumeSaved()
             }
+        )
+    }
+
+    if (showAnalyticsDisclosure) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Help improve Tabby?") },
+            text = {
+                Text(
+                    "Share optional usage analytics so we can understand which features matter. " +
+                        "This never includes your notes, names, email, exact amounts, advertising ID, or device ID. " +
+                        "You can change this later in Profile."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    analyticsEnabled = true
+                    showAnalyticsDisclosure = false
+                    scope.launch { graph.analyticsTracker.setConsent(true) }
+                }) { Text("Share analytics") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    analyticsEnabled = false
+                    showAnalyticsDisclosure = false
+                    scope.launch { graph.analyticsTracker.setConsent(false) }
+                }) { Text("Not now") }
+            },
+            containerColor = colors.elevatedSurface
         )
     }
 

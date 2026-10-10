@@ -210,3 +210,27 @@ dependencies {
     testImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.test.manifest)
 }
+
+/**
+ * Release declaration tripwire: Tabby does not use an advertising identifier.
+ * If a future dependency merges AD_ID into the manifest, fail the build before
+ * the Play Console declaration and shipped binary can disagree.
+ */
+val assertNoAdvertisingId by tasks.registering {
+    dependsOn("processReleaseMainManifest")
+    doLast {
+        val mergedManifest = layout.buildDirectory
+            .file("intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml")
+            .get().asFile
+        require(mergedManifest.exists()) { "Release merged manifest was not produced." }
+        require(!mergedManifest.readText().contains("com.google.android.gms.permission.AD_ID")) {
+            "Advertising ID permission detected in the release manifest. Remove the dependency or update Play declarations before building."
+        }
+    }
+}
+
+tasks.matching { task ->
+    task.name in setOf("assembleRelease", "bundleRelease", "packageRelease")
+}.configureEach {
+    dependsOn(assertNoAdvertisingId)
+}

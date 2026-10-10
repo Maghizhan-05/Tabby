@@ -10,6 +10,8 @@ import com.maghizhan.tabby.data.local.ExpenseStore
 import com.maghizhan.tabby.data.local.entity.CategoryEntity
 import com.maghizhan.tabby.data.local.entity.ExpenseEntity
 import com.maghizhan.tabby.data.sync.SyncState
+import com.maghizhan.tabby.analytics.AmountBucket
+import com.maghizhan.tabby.analytics.AnalyticsEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,6 +56,7 @@ class EntryViewModel(
     private val entryWriter: EntryWriter,
     private val expenseStore: ExpenseStore,
     private val onLocalWrite: suspend () -> Unit,
+    private val onAnalytics: suspend (AnalyticsEvent) -> Unit = {},
     private val now: () -> Instant = Instant::now
 ) : ViewModel() {
 
@@ -109,6 +112,7 @@ class EntryViewModel(
         viewModelScope.launch {
             try {
                 expenseStore.markDeleted(expense, owner)
+                onAnalytics(AnalyticsEvent.ExpenseDeleted)
                 onLocalWrite()
             } catch (cancellation: CancellationException) {
                 throw cancellation
@@ -199,6 +203,13 @@ class EntryViewModel(
                 )
 
                 entryWriter.save(entity, pending, owner)
+                if (pending != null) onAnalytics(AnalyticsEvent.CategoryCreated)
+                onAnalytics(
+                    if (edited == null) AnalyticsEvent.ExpenseLogged(
+                        hasNote = state.noteText.isNotBlank(),
+                        amountBucket = AmountBucket.from(amount)
+                    ) else AnalyticsEvent.ExpenseEdited
+                )
                 _uiState.update { it.copy(isSaving = false, saved = true, notice = null) }
 
                 // After the local commit, never before: a failed push must leave
@@ -228,9 +239,10 @@ class EntryViewModel(
         fun factory(
             entryWriter: EntryWriter,
             expenseStore: ExpenseStore,
-            onLocalWrite: suspend () -> Unit
+            onLocalWrite: suspend () -> Unit,
+            onAnalytics: suspend (AnalyticsEvent) -> Unit = {}
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { EntryViewModel(entryWriter, expenseStore, onLocalWrite) }
+            initializer { EntryViewModel(entryWriter, expenseStore, onLocalWrite, onAnalytics) }
         }
     }
 
